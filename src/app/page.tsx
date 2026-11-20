@@ -85,6 +85,11 @@ export default function Home() {
 
   const isStudent = authSession.role === 'student';
 
+  // Students get their own self-contained app-style layout (own header, bottom nav, logout in Profile).
+  if (isStudent) {
+    return <StudentPortal enforcedStudentId={authSession.studentId} onLogout={handleLogout} />;
+  }
+
   return (
     <div className="min-h-screen flex flex-col bg-slate-100/70">
       {/* Top Header */}
@@ -98,19 +103,10 @@ export default function Home() {
 
       {/* Main Content Area */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        {/* If Student logged in: Strictly show only their personal StudentPortal */}
-        {isStudent && (
-          <StudentPortal enforcedStudentId={authSession.studentId} />
-        )}
-
-        {/* If Admin logged in: Show chosen admin panel or student inspector */}
-        {!isStudent && (
-          <>
-            {role === 'provost' && <ProvostDashboard />}
-            {role === 'munshi' && <MunshiDashboard />}
-            {role === 'student' && <StudentPortal />}
-          </>
-        )}
+        {/* Admin logged in: chosen admin panel or student inspector */}
+        {role === 'provost' && <ProvostDashboard />}
+        {role === 'munshi' && <MunshiDashboard />}
+        {role === 'student' && <StudentPortal />}
       </main>
 
       {/* Footer */}
