@@ -205,7 +205,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({ enforcedStudentId,
             >
               {students.map((s) => (
                 <option key={s.id} value={s.id}>
-                  {s.name} ({s.enrollment_no} - {s.house} #{s.room_no})
+                  {s.name} ({s.enrollment_no} - {s.house} #{s.room_no} | Prev: {s.previous_room || 'New Allotment'})
                 </option>
               ))}
             </select>

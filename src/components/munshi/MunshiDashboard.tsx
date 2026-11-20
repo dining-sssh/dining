@@ -197,7 +197,8 @@ export const MunshiDashboard: React.FC = () => {
     const matchesSearch = 
       s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       s.enrollment_no.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      s.room_no.toLowerCase().includes(searchQuery.toLowerCase());
+      s.room_no.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (s.previous_room && s.previous_room.toLowerCase().includes(searchQuery.toLowerCase()));
     const matchesHouse = houseFilter === 'ALL' || s.house === houseFilter;
     return matchesSearch && matchesHouse;
   });
@@ -483,11 +484,9 @@ export const MunshiDashboard: React.FC = () => {
                         {/* Room */}
                         <td className="p-3 font-bold text-slate-900 text-sm">
                           {student.room_no}
-                          {student.previous_room && student.previous_room !== 'N/A' && (
-                            <span className="block text-[10px] text-slate-400 font-normal">
-                              Prev: {student.previous_room}
-                            </span>
-                          )}
+                          <span className="block text-[10px] text-slate-400 font-normal">
+                            Prev: {student.previous_room || 'New Allotment'}
+                          </span>
                         </td>
 
                         {/* House */}
@@ -658,7 +657,12 @@ export const MunshiDashboard: React.FC = () => {
 
                       {/* House & Room */}
                       <td className="p-2 border-r border-slate-200 font-semibold">
-                        <span className="text-emerald-800 font-bold">{student.house}</span>-{student.room_no}
+                        <div>
+                          <span className="text-emerald-800 font-bold">{student.house}</span>-{student.room_no}
+                        </div>
+                        <div className="text-[9px] text-slate-400 font-normal">
+                          Prev: {student.previous_room || 'New Allotment'}
+                        </div>
                       </td>
 
                       {/* 30 Days */}
