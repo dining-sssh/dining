@@ -56,8 +56,9 @@ export const ReviewFormModal: React.FC<ReviewFormModalProps> = ({
   activeStudent
 }) => {
   const todayStr = new Date().toISOString().split('T')[0];
+  const formattedToday = new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
 
-  const [date, setDate] = useState(todayStr);
+  const date = todayStr;
   const [mealType, setMealType] = useState<'lunch' | 'dinner' | 'all_day'>('lunch');
   const [quality, setQuality] = useState<RatingScale>(4);
   const [quantity, setQuantity] = useState<RatingScale>(4);
@@ -156,17 +157,14 @@ export const ReviewFormModal: React.FC<ReviewFormModalProps> = ({
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="p-6 sm:p-8 space-y-6">
-            {/* Top metadata strip: Date, Meal Type, and Student Tag */}
+            {/* Top metadata strip: Current Date, Meal Type, and Student Tag */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-xs">
               <div>
-                <label className="block font-semibold text-slate-500 mb-1">Review Date</label>
-                <input
-                  type="date"
-                  value={date}
-                  onChange={(e) => setDate(e.target.value)}
-                  className="w-full px-2.5 py-1.5 rounded-xl border border-slate-300 bg-white font-semibold text-slate-800 focus:ring-2 focus:ring-emerald-600 outline-none"
-                  required
-                />
+                <label className="block font-semibold text-slate-500 mb-1">Date (Current Date)</label>
+                <div className="flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-200 bg-white font-bold text-slate-800 shadow-xs">
+                  <Calendar className="w-4 h-4 text-emerald-700 shrink-0" />
+                  <span>Today ({formattedToday})</span>
+                </div>
               </div>
 
               <div>
