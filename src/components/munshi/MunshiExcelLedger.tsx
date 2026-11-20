@@ -1,930 +1,672 @@
 'use client';
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { 
-  Search, 
-  Printer, 
-  Save, 
-  RotateCcw, 
-  Check, 
-  ChevronLeft, 
-  ChevronRight, 
-  User, 
-  Calendar, 
-  FileSpreadsheet,
-  AlertCircle,
-  Plus,
-  Edit2,
-  X,
-  Ban
-} from 'lucide-react';
-import { Student, DiningDailyRecord, MonthlyBill, PaymentSlip, HOSTEL_HOUSES } from '@/types';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
+import { AlertCircle, Ban, Check, Edit2, FileSpreadsheet, Printer, Receipt, Save } from 'lucide-react';
+import { DiningDailyRecord, MonthlyBill, PaymentSlip, Student } from '@/types';
 import { DataService } from '@/lib/dataService';
+import { allocateDeficits, summarizeAccount } from '@/lib/billingUtils';
+import { SlipData } from '@/lib/foodSlip';
 import { CloseDiningModal } from '@/components/munshi/CloseDiningModal';
+import { SlipModal } from '@/components/student/SlipModal';
+import { SESSIONS, isEaten, sessionMonths, sessionOfDate, toDateKey } from '@/components/student/studentUtils';
 
-interface MonthLedgerRow {
-  monthKey: string;      // '2025-08'
-  monthLabel: string;    // 'Aug-25'
-  daysCount: number;     // 28, 30, 31
-  days: Record<number, number | string>; // day 1..31 -> 1, 0, or 'SS'
-  totalDaysEaten: number;
-  paidDays: number;
-  paidAmount: number;
-  slipNo: string;
-  slipDate: string;
-  fullPayment: number;
-}
+/**
+ * The Munshi's dining ledger (same layout as the Excel sheet).
+ * Everything on it comes from the real records: attendance from the day-wise register,
+ * payments from the food charges slips, deficits from the monthly bills.
+ */
 
-interface DeficitMonth {
-  label: string;
-  amount: number;
-}
+type Cell = 1 | 0 | 'SS' | 'R' | null; // eaten | not eaten | eaten with guest | mess off | no entry
 
-// 12 standard AMU dining academic months
-const ACADEMIC_MONTHS = [
-  { key: '2025-08', label: 'Aug-25', days: 31 },
-  { key: '2025-09', label: 'Sep-25', days: 30 },
-  { key: '2025-10', label: 'Oct-25', days: 31 },
-  { key: '2025-11', label: 'Nov-25', days: 30 },
-  { key: '2025-12', label: 'Dec-25', days: 31 },
-  { key: '2026-01', label: 'Jan-26', days: 31 },
-  { key: '2026-02', label: 'Feb-26', days: 28 },
-  { key: '2026-03', label: 'Mar-26', days: 31 },
-  { key: '2026-04', label: 'Apr-26', days: 30 },
-  { key: '2026-05', label: 'May-26', days: 31 },
-  { key: '2026-06', label: 'Jun-26', days: 30 },
-  { key: '2026-07', label: 'Jul-26', days: 31 }
-];
+const MONTH_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const DAYS = Array.from({ length: 31 }, (_, i) => i + 1);
+
+const monthTag = (key: string) => {
+  const [y, m] = key.split('-').map(Number);
+  return `${MONTH_SHORT[m - 1]}-${String(y).slice(2)}`;
+};
+
+const slipDate = (dateKey: string) => {
+  const [y, m, d] = dateKey.split('-').map(Number);
+  return `${String(d).padStart(2, '0')}-${MONTH_SHORT[m - 1]}-${String(y).slice(2)}`;
+};
+
+const inr = (n: number) => `₹${Math.round(n).toLocaleString('en-IN')}`;
 
 export const MunshiExcelLedger: React.FC = () => {
+  const todayKey = useMemo(() => toDateKey(new Date()), []);
+
   const [students, setStudents] = useState<Student[]>([]);
-  const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
-  const [enrollmentInput, setEnrollmentInput] = useState('');
-  const [badgeInput, setBadgeInput] = useState('');
-  const [lookupError, setLookupError] = useState<string | null>(null);
-  const [showSuggestions, setShowSuggestions] = useState(false);
-  const [showBadgeSuggestions, setShowBadgeSuggestions] = useState(false);
-  const [lookupSuccessMsg, setLookupSuccessMsg] = useState<string | null>(null);
+  const [selected, setSelected] = useState<Student | null>(null);
+  const [session, setSession] = useState(() => sessionOfDate(toDateKey(new Date())));
+
+  const [records, setRecords] = useState<DiningDailyRecord[]>([]);
+  const [bills, setBills] = useState<MonthlyBill[]>([]);
+  const [slips, setSlips] = useState<PaymentSlip[]>([]);
+  const [rate, setRate] = useState(65);
+  const [reloadTick, setReloadTick] = useState(0);
+
+  /** Cells changed by the Munshi and not saved yet: date -> 1 (eaten) or 0 (not eaten). */
+  const [edits, setEdits] = useState<Record<string, 0 | 1>>({});
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+
+  const [badgeInput, setBadgeInput] = useState('');
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [lookupError, setLookupError] = useState<string | null>(null);
+
   const [closeDiningOpen, setCloseDiningOpen] = useState(false);
+  const [preview, setPreview] = useState<SlipData | null>(null);
 
-  // Sync input fields whenever selected student changes
-  useEffect(() => {
-    if (selectedStudent) {
-      setEnrollmentInput(selectedStudent.enrollment_no);
-      setBadgeInput(selectedStudent.enrollment_no);
-      setLookupError(null);
-    }
-  }, [selectedStudent]);
+  const dirty = Object.keys(edits).length > 0;
 
-  // Lookup function: Munshi writes enrollment number to get student's information
-  const lookupStudentByEnrollment = useCallback((enNo: string): boolean => {
-    const query = enNo.trim().toUpperCase();
-    if (!query) {
-      setLookupError('Please write an Enrollment Number (e.g. GK2219 or GL8373)');
-      return false;
-    }
+  /* ----------------------------- students ----------------------------- */
 
-    // Exact match first
-    let found = students.find((s) => s.enrollment_no.toUpperCase() === query);
-
-    // Partial/prefix match fallback
-    if (!found) {
-      found = students.find((s) => s.enrollment_no.toUpperCase().includes(query));
-    }
-
-    if (found) {
-      setSelectedStudent(found);
-      setEnrollmentInput(found.enrollment_no);
-      setBadgeInput(found.enrollment_no);
+  const selectStudent = useCallback(
+    (s: Student) => {
+      if (selected && s.id !== selected.id && dirty && !confirm('You have unsaved attendance changes. Leave without saving?')) {
+        return false;
+      }
+      setEdits({});
+      setSelected(s);
+      setBadgeInput(s.enrollment_no);
       setLookupError(null);
       setShowSuggestions(false);
-      setShowBadgeSuggestions(false);
-      setLookupSuccessMsg(`Loaded student: ${found.enrollment_no} - ${found.name}`);
-      setTimeout(() => setLookupSuccessMsg(null), 3500);
       return true;
-    } else {
-      setLookupError(`No student resident found with Enrollment No. "${enNo}".`);
-      return false;
-    }
-  }, [students]);
+    },
+    [selected, dirty]
+  );
 
-  // Ledger state per month for the selected student
-  const [monthRows, setMonthRows] = useState<MonthLedgerRow[]>([]);
-  const [deficitPrevYear, setDeficitPrevYear] = useState<number>(0);
-  const [remarkText, setRemarkText] = useState<string>('0');
-  const [deficits, setDeficits] = useState<DeficitMonth[]>([
-    { label: 'Aug-25', amount: 370 },
-    { label: 'Sep-25', amount: 330 },
-    { label: 'Oct-25', amount: 300 },
-    { label: 'Nov-25', amount: 390 },
-    { label: 'Dec-25', amount: 0 },
-    { label: 'Jan-26', amount: 0 },
-    { label: 'Feb-26', amount: 0 },
-    { label: 'Mar-26', amount: 0 },
-    { label: 'Apr-26', amount: 0 },
-    { label: 'May-26', amount: 0 },
-    { label: 'Jun-26', amount: 0 },
-    { label: 'Jul-26', amount: 0 }
-  ]);
-
-  // Load students on mount
   useEffect(() => {
-    DataService.getStudents().then((st) => {
-      setStudents(st);
-      if (st.length > 0) {
-        // Check URL parameters for specific student if directed from Students page
-        let matched: Student | undefined;
-        if (typeof window !== 'undefined') {
-          const urlParams = new URLSearchParams(window.location.search);
-          const enParam = urlParams.get('en')?.toUpperCase();
-          const studentIdParam = urlParams.get('student');
-          if (enParam) {
-            matched = st.find((s) => s.enrollment_no.toUpperCase() === enParam);
-          } else if (studentIdParam) {
-            matched = st.find((s) => s.id === studentIdParam);
-          }
-        }
-
-        // Prefer matched URL student, then Ayaz Irfan (GL8373) from reference, then first student
-        const defaultStudent = matched || st.find((s) => s.enrollment_no === 'GL8373') || st[0];
-        setSelectedStudent(defaultStudent);
-      }
+    DataService.getStudents().then((list) => {
+      setStudents(list);
+      if (list.length === 0) return;
+      // A link from the Students page can open a specific resident.
+      const params = new URLSearchParams(window.location.search);
+      const en = params.get('en')?.toUpperCase();
+      const id = params.get('student');
+      const match = list.find((s) => (en && s.enrollment_no.toUpperCase() === en) || (id && s.id === id));
+      const first = match ?? list[0];
+      setSelected(first);
+      setBadgeInput(first.enrollment_no);
     });
   }, []);
 
-  // Initialize ledger rows when student changes
+  const lookup = (raw: string) => {
+    const q = raw.trim().toUpperCase();
+    if (!q) {
+      setLookupError('Write an enrollment number (for example GK2219).');
+      return;
+    }
+    const found =
+      students.find((s) => s.enrollment_no.toUpperCase() === q) ??
+      students.find((s) => s.enrollment_no.toUpperCase().includes(q));
+    if (found) selectStudent(found);
+    else setLookupError(`No resident found with enrollment no. "${raw.trim()}".`);
+  };
+
+  /* ------------------------------- data ------------------------------- */
+
   useEffect(() => {
-    if (!selectedStudent) return;
-
-    // Load daily records to populate 1s and 0s
-    DataService.getAllDailyRecords().then((allRecords) => {
-      const studentRecords = allRecords.filter((r) => r.student_id === selectedStudent.id);
-      const recordMap = new Map<string, DiningDailyRecord>();
-      studentRecords.forEach((r) => recordMap.set(r.date, r));
-
-      const isAyaz = selectedStudent.enrollment_no === 'GL8373';
-
-      const initialRows: MonthLedgerRow[] = ACADEMIC_MONTHS.map((m, mIdx) => {
-        const daysObj: Record<number, number | string> = {};
-
-        for (let d = 1; d <= m.days; d++) {
-          if (isAyaz) {
-            // Replicate the exact pattern from the user's uploaded image:
-            if (m.key === '2025-08') {
-              daysObj[d] = 1;
-            } else if (m.key === '2025-09') {
-              daysObj[d] = (d === 4 || d === 31) ? 0 : 1;
-            } else if (m.key === '2025-10') {
-              daysObj[d] = d === 18 ? 'SS' : 1;
-            } else if (m.key === '2025-11') {
-              daysObj[d] = d <= 3 ? 1 : 0;
-            } else {
-              daysObj[d] = 0;
-            }
-          } else {
-            // General realistic record from database
-            const dStr = d < 10 ? `0${d}` : `${d}`;
-            const dateStr = `${m.key}-${dStr}`;
-            const rec = recordMap.get(dateStr);
-            if (rec) {
-              daysObj[d] = (rec.eaten ?? (rec.lunch || rec.dinner)) && !rec.is_rebate ? 1 : 0;
-            } else {
-              daysObj[d] = (mIdx < 4 && d <= 20) ? 1 : 0;
-            }
-          }
-        }
-
-        // Sum eaten days
-        const totalEaten = Object.values(daysObj).filter((v) => v === 1 || v === 'SS').length;
-
-        // Payments from image for Aug-25
-        let paidDays = 0;
-        let paidAmount = 0;
-        let slipNo = '0';
-        let slipDate = '0-Jan-00';
-        let fullPayment = 0;
-
-        if (isAyaz && m.key === '2025-08') {
-          paidDays = 90.00;
-          paidAmount = 4200.00;
-          slipNo = '110/10919';
-          slipDate = '31-Jul-25';
-          fullPayment = 4200.00;
-        } else if (!isAyaz && mIdx === 0) {
-          paidDays = 60.00;
-          paidAmount = 3900.00;
-          slipNo = '104/8821';
-          slipDate = '01-Aug-26';
-          fullPayment = 3900.00;
-        }
-
-        return {
-          monthKey: m.key,
-          monthLabel: m.label,
-          daysCount: m.days,
-          days: daysObj,
-          totalDaysEaten: totalEaten,
-          paidDays,
-          paidAmount,
-          slipNo,
-          slipDate,
-          fullPayment
-        };
-      });
-
-      setMonthRows(initialRows);
+    if (!selected) return;
+    let cancelled = false;
+    Promise.all([
+      DataService.getAllDailyRecords({ studentId: selected.id }),
+      DataService.getBillsForStudent(selected.enrollment_no),
+      DataService.getPaymentSlipsForStudent(selected.enrollment_no),
+      DataService.getSettings()
+    ]).then(([allRecords, studentBills, studentSlips, settings]) => {
+      if (cancelled) return;
+      setRecords(allRecords);
+      setBills(studentBills);
+      setSlips(studentSlips);
+      setRate(settings.diet_rate || 65);
     });
-  }, [selectedStudent]);
+    return () => {
+      cancelled = true;
+    };
+  }, [selected, reloadTick]);
 
-  // Toggle cell eaten/not eaten (1 / 0)
-  const toggleCell = (monthKey: string, day: number) => {
-    setMonthRows((prev) =>
-      prev.map((row) => {
-        if (row.monthKey !== monthKey) return row;
-        const currentVal = row.days[day];
-        const nextVal = currentVal === 1 || currentVal === 'SS' ? 0 : 1;
-        const nextDays = { ...row.days, [day]: nextVal };
-        const newTotal = Object.values(nextDays).filter((v) => v === 1 || v === 'SS').length;
+  const recordByDate = useMemo(() => new Map(records.map((r) => [r.date, r])), [records]);
+  const months = useMemo(() => sessionMonths(session), [session]);
 
-        return {
-          ...row,
-          days: nextDays,
-          totalDaysEaten: newTotal
-        };
-      })
-    );
-  };
-
-  // Toggle whole month to 1 or 0
-  const setMonthAll = (monthKey: string, val: number) => {
-    setMonthRows((prev) =>
-      prev.map((row) => {
-        if (row.monthKey !== monthKey) return row;
-        const nextDays: Record<number, number | string> = {};
-        for (let d = 1; d <= row.daysCount; d++) {
-          nextDays[d] = val;
-        }
-        return {
-          ...row,
-          days: nextDays,
-          totalDaysEaten: val === 1 ? row.daysCount : 0
-        };
-      })
-    );
-  };
-
-  // Update payment row
-  const updatePayment = (
-    monthKey: string,
-    field: keyof Pick<MonthLedgerRow, 'paidDays' | 'paidAmount' | 'slipNo' | 'slipDate' | 'fullPayment'>,
-    val: any
-  ) => {
-    setMonthRows((prev) =>
-      prev.map((row) => (row.monthKey === monthKey ? { ...row, [field]: val } : row))
-    );
-  };
-
-  // Aggregates
-  const totalDaysEatenAll = useMemo(
-    () => monthRows.reduce((acc, r) => acc + r.totalDaysEaten, 0),
-    [monthRows]
+  const cellOf = useCallback(
+    (dateKey: string): Cell => {
+      if (dateKey in edits) return edits[dateKey];
+      const rec = recordByDate.get(dateKey);
+      if (!rec) return null;
+      if (rec.is_rebate) return 'R';
+      if (isEaten(rec)) return rec.guest_diets > 0 ? 'SS' : 1;
+      return 0;
+    },
+    [edits, recordByDate]
   );
 
-  const totalDaysPaidAll = useMemo(
-    () => monthRows.reduce((acc, r) => acc + (Number(r.paidDays) || 0), 0),
-    [monthRows]
-  );
+  const toggleCell = (dateKey: string) => {
+    if (dateKey > todayKey) return; // future days are not marked yet
+    const current = cellOf(dateKey);
+    const next: 0 | 1 = current === 1 || current === 'SS' ? 0 : 1;
 
-  // Current balance in Days: Paid - Eaten (e.g. 90 - 93 = -3 Days)
-  const currentBalanceDays = Math.round((totalDaysPaidAll - totalDaysEatenAll) * 10) / 10;
+    // Back to what is already saved: not an edit any more.
+    const rec = recordByDate.get(dateKey);
+    const savedValue: Cell = !rec ? null : rec.is_rebate ? 'R' : isEaten(rec) ? (rec.guest_diets > 0 ? 'SS' : 1) : 0;
+    const matchesSaved = (next === 1 && (savedValue === 1 || savedValue === 'SS')) || (next === 0 && savedValue === 0);
 
-  // Deficit amounts
-  const totalDeficit = useMemo(
-    () => deficits.reduce((acc, d) => acc + d.amount, 0),
-    [deficits]
-  );
-  const paidDeficit = 0;
-  const pendingDeficit = totalDeficit - paidDeficit;
+    setEdits((prev) => {
+      const copy = { ...prev };
+      if (matchesSaved) delete copy[dateKey];
+      else copy[dateKey] = next;
+      return copy;
+    });
+  };
 
-  // Save changes to daily records
-  const handleSaveLedger = async () => {
-    if (!selectedStudent) return;
+  const save = async () => {
+    if (!selected || !dirty) return;
     setIsSaving(true);
-
     try {
-      const recordsToUpsert: DiningDailyRecord[] = [];
-      monthRows.forEach((row) => {
-        for (let d = 1; d <= row.daysCount; d++) {
-          const val = row.days[d];
-          const isEat = val === 1 || val === 'SS';
-          const dStr = d < 10 ? `0${d}` : `${d}`;
-          const dateStr = `${row.monthKey}-${dStr}`;
-
-          recordsToUpsert.push({
-            id: `rec-${selectedStudent.id}-${dateStr}`,
-            student_id: selectedStudent.id,
-            enrollment_no: selectedStudent.enrollment_no,
-            date: dateStr,
-            eaten: isEat,
-            lunch: isEat,
-            dinner: isEat,
-            is_rebate: !isEat,
-            guest_diets: val === 'SS' ? 1 : 0,
-            marked_by: 'Munshi'
-          });
-        }
+      const toSave: DiningDailyRecord[] = Object.entries(edits).map(([date, value]) => {
+        const existing = recordByDate.get(date);
+        const eaten = value === 1;
+        return {
+          id: `rec-${selected.id}-${date}`,
+          student_id: selected.id,
+          enrollment_no: selected.enrollment_no,
+          guest_diets: 0,
+          ...existing,
+          date,
+          eaten,
+          lunch: eaten,
+          dinner: eaten,
+          is_rebate: false,
+          rebate_reason: undefined,
+          marked_by: 'Munshi'
+        };
       });
-
-      await DataService.updateDailyRecords(recordsToUpsert);
+      await DataService.updateDailyRecords(toSave);
+      setEdits({});
+      setReloadTick((t) => t + 1);
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3000);
     } catch (e) {
       console.error(e);
-      alert('Failed to save ledger changes');
+      alert('Could not save the ledger. Please try again.');
     } finally {
       setIsSaving(false);
     }
   };
 
+  /* ---------------------------- calculations --------------------------- */
+
+  const slipsByMonth = useMemo(() => {
+    const map = new Map<string, PaymentSlip[]>();
+    [...slips]
+      .sort((a, b) => a.paid_on.localeCompare(b.paid_on) || Number(a.slip_no) - Number(b.slip_no))
+      .forEach((s) => {
+        const key = s.paid_on.slice(0, 7);
+        map.set(key, [...(map.get(key) ?? []), s]);
+      });
+    return map;
+  }, [slips]);
+
+  const billByMonth = useMemo(() => new Map(bills.map((b) => [b.month_key, b])), [bills]);
+  const allocation = useMemo(() => allocateDeficits(bills, slips), [bills, slips]);
+  const account = useMemo(() => summarizeAccount(bills, slips), [bills, slips]);
+
+  const monthRows = useMemo(
+    () =>
+      months.map((key) => {
+        const [y, m] = key.split('-').map(Number);
+        const daysCount = new Date(y, m, 0).getDate();
+        let eaten = 0;
+        for (let d = 1; d <= daysCount; d++) {
+          const c = cellOf(`${key}-${String(d).padStart(2, '0')}`);
+          if (c === 1 || c === 'SS') eaten += 1;
+        }
+        const deficit = allocation.months.find((x) => x.bill.month_key === key);
+        return { key, daysCount, eaten, bill: billByMonth.get(key), deficit, slips: slipsByMonth.get(key) ?? [] };
+      }),
+    [months, cellOf, allocation, billByMonth, slipsByMonth]
+  );
+
+  const sessionTotals = useMemo(() => {
+    const inSession = monthRows.map((r) => r.deficit).filter((d): d is NonNullable<typeof d> => Boolean(d));
+    return {
+      billed: inSession.reduce((a, d) => a + d.bill.total_amount, 0),
+      applied: inSession.reduce((a, d) => a + d.applied, 0),
+      pending: inSession.reduce((a, d) => a + d.deficit, 0)
+    };
+  }, [monthRows]);
+
+  const eatenTotal = monthRows.reduce((a, r) => a + r.eaten, 0);
+  const paidInSession = monthRows.reduce((a, r) => a + r.slips.reduce((x, s) => x + s.amount, 0), 0);
+  const paidDaysTotal = paidInSession / rate;
+  const previousDeficit = allocation.months
+    .filter((d) => d.bill.month_key < months[0])
+    .reduce((a, d) => a + d.deficit, 0);
+
+  const pendingAmount = Math.max(account.balance, 0);
+  const balanceDays = Math.round((-account.balance / rate) * 10) / 10;
+  const messOffDays = records.filter((r) => r.is_rebate && months.includes(r.date.slice(0, 7))).length;
+  const prevSession = `${Number(session.split('-')[0]) - 1}-${Number(session.split('-')[0])}`;
+  const sessionLabel = session.replace('-20', ' - ');
+
+  const suggestions = useMemo(() => {
+    const q = badgeInput.trim().toUpperCase();
+    if (!q) return [];
+    return students.filter((s) => s.enrollment_no.toUpperCase().includes(q)).slice(0, 8);
+  }, [students, badgeInput]);
+
+  /* -------------------------------- UI -------------------------------- */
+
   return (
     <div className="space-y-3">
-      {/* Sleek, professional 1-line action strip */}
+      {/* Action strip */}
       <div className="no-print flex flex-wrap items-center justify-between gap-2.5 px-1">
-        <div className="flex items-center gap-2 text-xs">
-          <span className="flex items-center gap-1.5 font-bold text-slate-800 font-serif">
-            <FileSpreadsheet className="w-4 h-4 text-emerald-700" />
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          <span className="flex items-center gap-1.5 font-serif font-bold text-slate-800">
+            <FileSpreadsheet className="h-4 w-4 text-emerald-700" />
             AMU Dining Hall Ledger
           </span>
-          <span className="text-slate-300">•</span>
-          <span className="text-slate-500 font-medium">Session 2025–26</span>
-          <span className="text-slate-300">•</span>
-          <span className="text-[11px] font-semibold text-emerald-800 bg-emerald-50 border border-emerald-200/80 px-2 py-0.5 rounded-md">
-            Click enrollment cell (top-left) to lookup resident
-          </span>
+          <select
+            value={session}
+            onChange={(e) => setSession(e.target.value)}
+            aria-label="Session"
+            className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-600"
+          >
+            {SESSIONS.map((s) => (
+              <option key={s.value} value={s.value}>
+                Session {s.value}
+              </option>
+            ))}
+          </select>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {selected && (
+            <Link
+              href={`/munshi/slips?student=${selected.id}`}
+              className="press flex items-center gap-1.5 rounded-lg bg-amber-400 px-3 py-1.5 text-xs font-bold text-emerald-950 shadow-sm"
+            >
+              <Receipt className="h-3.5 w-3.5" />
+              Cut slip
+            </Link>
+          )}
           <button
             type="button"
             onClick={() => setCloseDiningOpen(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-300 text-xs font-bold rounded-lg shadow-xs transition"
-            title="Close dining for resident (Next day rule enforced)"
+            className="press flex items-center gap-1.5 rounded-lg border border-rose-300 bg-rose-50 px-3 py-1.5 text-xs font-bold text-rose-800"
+            title="Close dining for resident (next day rule enforced)"
           >
-            <Ban className="w-3.5 h-3.5 text-rose-600" />
-            <span>Close Dining</span>
+            <Ban className="h-3.5 w-3.5 text-rose-600" />
+            Close dining
           </button>
-
           <button
             type="button"
-            onClick={handleSaveLedger}
-            disabled={isSaving}
-            className="flex items-center gap-1.5 px-3.5 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold rounded-lg shadow-sm transition disabled:opacity-50"
+            onClick={save}
+            disabled={isSaving || !dirty}
+            className="press flex items-center gap-1.5 rounded-lg bg-emerald-700 px-3.5 py-1.5 text-xs font-bold text-white shadow-sm disabled:opacity-50"
           >
-            <Save className="w-3.5 h-3.5" />
-            <span>{isSaving ? 'Saving...' : 'Save Ledger'}</span>
+            <Save className="h-3.5 w-3.5" />
+            {isSaving ? 'Saving…' : dirty ? `Save ${Object.keys(edits).length} change${Object.keys(edits).length > 1 ? 's' : ''}` : 'Saved'}
           </button>
-
           <button
             type="button"
             onClick={() => window.print()}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 text-xs font-semibold rounded-lg shadow-xs transition"
-            title="Print Ledger Sheet"
+            className="press flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700"
           >
-            <Printer className="w-3.5 h-3.5 text-slate-500" />
-            <span>Print</span>
+            <Printer className="h-3.5 w-3.5 text-slate-500" />
+            Print
           </button>
         </div>
       </div>
 
       {saveSuccess && (
-        <div className="p-2.5 bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-xl text-xs font-bold flex items-center gap-2 shadow-xs">
-          <Check className="w-4 h-4 text-emerald-700" />
-          <span>Ledger attendance and payments successfully recorded!</span>
+        <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-2.5 text-xs font-bold text-emerald-900">
+          <Check className="h-4 w-4 text-emerald-700" />
+          Attendance saved.
         </div>
       )}
-
       {lookupError && (
-        <div className="p-2.5 bg-rose-50 border border-rose-200 text-rose-800 rounded-xl text-xs font-semibold flex items-center gap-2 shadow-xs">
-          <AlertCircle className="w-4 h-4 text-rose-600 flex-shrink-0" />
-          <span>{lookupError}</span>
+        <div className="flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 p-2.5 text-xs font-semibold text-rose-800">
+          <AlertCircle className="h-4 w-4 shrink-0 text-rose-600" />
+          {lookupError}
         </div>
       )}
 
-      {/* ========================================================================= */}
-      {/* THE ICONIC AMU EXCEL LEDGER INTERFACE (EXACT REPLICA OF UPLOADED IMAGE)  */}
-      {/* ========================================================================= */}
-      <div className="bg-white border border-slate-300 rounded-xl shadow-md overflow-x-auto p-2 sm:p-3 print:border-none print:shadow-none print:p-0">
-        
-        {/* TOP PROFILE & DEFICIT DASHBOARD GRID */}
-        <div className="w-full min-w-[1020px] grid grid-cols-12 gap-1.5 border border-slate-400 bg-slate-100 p-1.5 text-slate-900 font-sans mb-2">
-          
-          {/* 1. STUDENT IDENTITY BLOCK (Columns 1 to 4) */}
-          <div className="col-span-4 border border-slate-400 bg-[#e2efda] p-3 flex flex-col justify-between shadow-xs relative">
-            {/* Top Large Enrollment Tag Header (Directly Editable Munshi Cell) */}
-            <div className="relative group bg-[#595959] text-white text-center py-1.5 px-3 rounded-sm shadow-inner flex flex-col items-center justify-center">
-              <div className="w-full flex items-center justify-center relative">
+      {/* The sheet */}
+      <div className="overflow-x-auto rounded-xl border border-slate-300 bg-white p-2 shadow-md sm:p-3 print:border-none print:p-0 print:shadow-none">
+        {/* Top summary grid */}
+        <div className="mb-2 grid min-w-[1020px] grid-cols-12 gap-1.5 border border-slate-400 bg-slate-100 p-1.5 font-sans text-slate-900">
+          {/* Identity */}
+          <div className="relative col-span-4 flex flex-col justify-between border border-slate-400 bg-[#e2efda] p-3">
+            <div className="group relative flex flex-col items-center justify-center rounded-sm bg-[#595959] px-3 py-1.5 text-center text-white shadow-inner">
+              <div className="relative flex w-full items-center justify-center">
                 <input
                   type="text"
                   value={badgeInput}
                   onChange={(e) => {
                     const val = e.target.value.toUpperCase();
                     setBadgeInput(val);
-                    setShowBadgeSuggestions(true);
+                    setShowSuggestions(true);
                     setLookupError(null);
                     const exact = students.find((s) => s.enrollment_no.toUpperCase() === val.trim());
-                    if (exact) {
-                      setSelectedStudent(exact);
-                    }
+                    if (exact) selectStudent(exact);
                   }}
-                  onFocus={() => setShowBadgeSuggestions(true)}
-                  onBlur={() => setTimeout(() => setShowBadgeSuggestions(false), 250)}
+                  onFocus={() => setShowSuggestions(true)}
+                  onBlur={() => setTimeout(() => setShowSuggestions(false), 250)}
                   onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      lookupStudentByEnrollment(badgeInput);
-                      setShowBadgeSuggestions(false);
-                    }
+                    if (e.key === 'Enter') lookup(badgeInput);
                   }}
-                  title="Click or write enrollment number to search student"
+                  title="Write an enrollment number to find the student"
                   placeholder="ENROLL NO"
-                  className="w-full bg-transparent font-serif font-black text-3xl sm:text-4xl tracking-wider text-slate-100 text-center uppercase focus:outline-none focus:ring-2 focus:ring-amber-400 rounded transition placeholder-slate-400 cursor-text hover:bg-white/10"
+                  aria-label="Enrollment number"
+                  className="w-full cursor-text rounded bg-transparent text-center font-serif text-3xl font-black uppercase tracking-wider text-slate-100 placeholder-slate-400 hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-amber-400 sm:text-4xl"
                 />
-                <Edit2 className="w-3.5 h-3.5 text-slate-300 absolute right-1 top-1/2 -translate-y-1/2 opacity-40 group-hover:opacity-100 pointer-events-none transition" />
+                <Edit2 className="pointer-events-none absolute right-1 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-300 opacity-40 group-hover:opacity-100" />
               </div>
-              <span className="text-[9px] font-sans text-slate-300 tracking-normal opacity-75">
-                Write Enrollment No & press Enter
-              </span>
+              <span className="font-sans text-[9px] text-slate-300 opacity-75">Write enrollment no. and press Enter</span>
 
-              {/* Suggestions Dropdown for Badge */}
-              {showBadgeSuggestions && badgeInput.trim().length > 0 && (
-                <div className="absolute top-full left-0 right-0 mt-1 bg-white text-slate-900 border border-slate-300 rounded shadow-2xl z-50 max-h-48 overflow-y-auto text-left">
-                  {students
-                    .filter((s) => s.enrollment_no.toUpperCase().includes(badgeInput.trim().toUpperCase()))
-                    .map((s) => (
-                      <button
-                        key={s.id}
-                        type="button"
-                        onMouseDown={() => {
-                          setSelectedStudent(s);
-                          setBadgeInput(s.enrollment_no);
-                          setEnrollmentInput(s.enrollment_no);
-                          setShowBadgeSuggestions(false);
-                        }}
-                        className="w-full px-3 py-2 text-xs hover:bg-emerald-50 hover:text-emerald-950 flex items-center justify-between border-b border-slate-100 last:border-b-0"
-                      >
-                        <span className="font-mono font-black text-emerald-800">{s.enrollment_no}</span>
-                        <span className="font-semibold text-slate-800">{s.name}</span>
-                        <span className="text-[10px] text-slate-500 font-mono">{s.house} {s.room_no}</span>
-                      </button>
-                    ))}
+              {showSuggestions && suggestions.length > 0 && (
+                <div className="absolute left-0 right-0 top-full z-50 mt-1 max-h-48 overflow-y-auto rounded border border-slate-300 bg-white text-left text-slate-900 shadow-2xl">
+                  {suggestions.map((s) => (
+                    <button
+                      key={s.id}
+                      type="button"
+                      onMouseDown={() => selectStudent(s)}
+                      className="flex w-full items-center justify-between border-b border-slate-100 px-3 py-2 text-xs last:border-b-0 hover:bg-emerald-50"
+                    >
+                      <span className="font-mono font-black text-emerald-800">{s.enrollment_no}</span>
+                      <span className="font-semibold text-slate-800">{s.name}</span>
+                      <span className="font-mono text-[10px] text-slate-500">
+                        {s.house} {s.room_no}
+                      </span>
+                    </button>
+                  ))}
                 </div>
               )}
             </div>
 
-            {/* Student Name */}
-            <div className="mt-2.5">
-              <h2 className="font-serif font-black text-xl sm:text-2xl text-[#1e293b] tracking-wide">
-                {selectedStudent?.name?.toUpperCase() || 'SAAD QURESHI'}
-              </h2>
-            </div>
+            <h2 className="mt-2.5 font-serif text-xl font-black tracking-wide text-[#1e293b] sm:text-2xl">
+              {selected ? selected.name.toUpperCase() : 'SELECT A STUDENT'}
+            </h2>
 
-            {/* Course & Room Corner Badge */}
             <div className="mt-2 flex items-center justify-between font-serif text-sm">
               <div>
-                <span className="font-semibold text-slate-700">Course</span>{' '}
-                <span className="font-black text-slate-900 ml-2">{selectedStudent?.course || 'M.Sc (Physics)'}</span>
+                <span className="font-semibold text-slate-700">Course</span>
+                <span className="ml-2 font-black text-slate-900">{selected?.course ?? '—'}</span>
               </div>
-              <div className="text-right font-black text-sm text-slate-900">
-                {selectedStudent?.house || 'QH'} <span className="text-sm">{selectedStudent?.room_no || '05'}</span>
-              </div>
-            </div>
-
-            {/* En. No & Room No Row */}
-            <div className="mt-1.5 flex items-center justify-between font-serif text-xs border-t border-slate-300 pt-1.5">
-              <div>
-                <span className="font-semibold text-slate-700">En. No.</span>{' '}
-                <span className="font-black text-slate-900 font-mono ml-2">{selectedStudent?.enrollment_no || 'GK2219'}</span>
+              <div className="text-right text-sm font-black text-slate-900">
+                {selected ? `${selected.house} ${selected.room_no}` : ''}
               </div>
             </div>
 
+            <div className="mt-1.5 border-t border-slate-300 pt-1.5 font-serif text-xs">
+              <span className="font-semibold text-slate-700">En. No.</span>
+              <span className="ml-2 font-mono font-black text-slate-900">{selected?.enrollment_no ?? '—'}</span>
+            </div>
             <div className="mt-1 flex items-center justify-between font-serif text-xs">
               <div>
-                <span className="font-semibold text-slate-700">ROOM. No.</span>{' '}
-                <span className="font-black text-slate-900 ml-2">
-                  {selectedStudent?.house || 'QH'} {selectedStudent?.room_no || '05'}
-                </span>
+                <span className="font-semibold text-slate-700">ROOM. No.</span>
+                <span className="ml-2 font-black text-slate-900">{selected ? `${selected.house} ${selected.room_no}` : '—'}</span>
               </div>
               <button
                 type="button"
                 onClick={() => setCloseDiningOpen(true)}
-                className="text-[10px] font-sans font-bold text-rose-700 hover:text-rose-900 underline flex items-center gap-1"
-                title="Close resident dining (Mess off)"
+                className="no-print flex items-center gap-1 font-sans text-[10px] font-bold text-rose-700 underline hover:text-rose-900"
               >
-                <Ban className="w-3 h-3 text-rose-600" />
-                <span>Close Mess</span>
+                <Ban className="h-3 w-3 text-rose-600" />
+                Close mess
               </button>
             </div>
           </div>
 
-          {/* 2. CURRENT BALANCE BLOCK (Columns 5 to 7) */}
-          <div className="col-span-3 border border-slate-400 bg-white flex flex-col justify-between">
-            {/* Header */}
-            <div className="bg-[#e2efda] text-[#274e13] font-serif font-black text-xs sm:text-sm text-center py-2 border-b border-slate-400">
-              CURRENT BAL. 2025 - 26 ↓
+          {/* Current balance */}
+          <div className="col-span-3 flex flex-col justify-between border border-slate-400 bg-white">
+            <div className="border-b border-slate-400 bg-[#e2efda] py-2 text-center font-serif text-xs font-black text-[#274e13] sm:text-sm">
+              CURRENT BAL. {sessionLabel} ↓
             </div>
-
-            {/* BIG RED/GREEN BALANCE BOX */}
             <div
-              className={`flex-1 flex items-center justify-center p-4 text-center ${
-                currentBalanceDays < 0
-                  ? 'bg-[#c00000] text-white'
-                  : currentBalanceDays > 0
-                  ? 'bg-[#385723] text-white'
-                  : 'bg-slate-700 text-white'
+              className={`flex flex-1 items-center justify-center p-4 text-center text-white ${
+                balanceDays < 0 ? 'bg-[#c00000]' : balanceDays > 0 ? 'bg-[#385723]' : 'bg-slate-700'
               }`}
             >
-              <span className="font-serif font-black text-3xl sm:text-4xl tracking-tight drop-shadow-sm">
-                {currentBalanceDays} Days
+              <span className="font-serif text-3xl font-black tracking-tight drop-shadow-sm sm:text-4xl">
+                {balanceDays} Days
               </span>
             </div>
-
-            {/* Bottom Remark Strip */}
-            <div className="bg-[#c00000] text-white font-serif font-bold text-xs flex items-center justify-between px-3 py-1.5 border-t border-red-800">
-              <span>REMARK →</span>
-              <span className="font-mono text-sm">{remarkText}</span>
+            <div className="flex items-center justify-between border-t border-slate-300 bg-slate-100 px-3 py-1.5 font-serif text-xs font-bold text-slate-800">
+              <span>MESS OFF DAYS →</span>
+              <span className="font-mono text-sm">{messOffDays}</span>
             </div>
           </div>
 
-          {/* 3. DEFICIT & PREVIOUS ROOM SUMMARY (Columns 8 to 9) */}
-          <div className="col-span-2 border border-slate-400 bg-white flex flex-col justify-between text-xs font-serif">
-            {/* Deficit 24-25 */}
-            <div className="border-b border-slate-300 flex">
-              <div className="bg-[#b4c6e7] text-[#1f4e78] font-bold p-1.5 w-3/5 text-[11px] leading-tight flex items-center">
-                DEFICIT 24 - 25
+          {/* Previous deficit + pending */}
+          <div className="col-span-2 flex flex-col justify-between border border-slate-400 bg-white font-serif text-xs">
+            <div className="flex border-b border-slate-300">
+              <div className="flex w-3/5 items-center bg-[#b4c6e7] p-1.5 text-[11px] font-bold leading-tight text-[#1f4e78]">
+                DEFICIT {prevSession.replace('-20', ' - ')}
               </div>
-              <div className="bg-[#d9e1f2] text-slate-900 font-mono font-bold p-1.5 w-2/5 text-right flex items-center justify-end">
-                ₹ {deficitPrevYear.toFixed(2)}
-              </div>
-            </div>
-
-            {/* Negative days in rupees */}
-            <div className="border-b border-slate-300 flex">
-              <div className="bg-[#d9e1f2] text-slate-800 font-bold p-1.5 w-3/5 text-[10px] leading-tight flex items-center">
-                NEGATIVE DAYS IN RUPEES
-              </div>
-              <div className="bg-slate-100 text-slate-900 font-mono font-bold p-1.5 w-2/5 text-right flex items-center justify-end">
-                ₹ {currentBalanceDays < 0 ? Math.abs(currentBalanceDays * 65) : 0}
+              <div className="flex w-2/5 items-center justify-end bg-[#d9e1f2] p-1.5 text-right font-mono font-bold text-slate-900">
+                {inr(previousDeficit)}
               </div>
             </div>
-
-            {/* Previous Room */}
-            <div className="border-b border-slate-300 flex">
-              <div className="bg-[#b4c6e7] text-slate-900 font-bold p-1.5 w-2/5 text-[11px] flex items-center">
-                ROOM NO
+            <div className="flex border-b border-slate-300">
+              <div className="flex w-3/5 items-center bg-[#d9e1f2] p-1.5 text-[10px] font-bold leading-tight text-slate-800">
+                RATE PER DAY
               </div>
-              <div className="bg-[#d9e1f2] text-slate-900 font-bold p-1.5 w-3/5 text-right text-[11px] truncate flex items-center justify-end">
-                {selectedStudent?.previous_room || 'H.M. A08'}
+              <div className="flex w-2/5 items-center justify-end bg-slate-100 p-1.5 text-right font-mono font-bold text-slate-900">
+                {inr(rate)}
               </div>
             </div>
-
-            {/* Total Pending Amount Big Green Card */}
-            <div className="bg-[#c5e0b4] p-1.5 text-center border-t border-slate-300">
-              <div className="text-[10px] font-bold text-[#274e13] uppercase">
-                TOTAL PENDING AMOUNT
+            <div className="flex border-b border-slate-300">
+              <div className="flex w-2/5 items-center bg-[#b4c6e7] p-1.5 text-[11px] font-bold text-slate-900">ROOM NO</div>
+              <div className="flex w-3/5 items-center justify-end truncate bg-[#d9e1f2] p-1.5 text-right text-[11px] font-bold text-slate-900">
+                {selected?.previous_room || 'New allotment'}
               </div>
-              <div className="bg-[#70ad47] text-white font-serif font-black text-xl sm:text-2xl py-1 px-2 rounded-sm mt-0.5 shadow-inner flex items-center justify-center relative">
-                <span>₹ 0</span>
-                <span className="absolute right-1 bottom-0.5 text-[8px] font-mono text-emerald-100 font-normal">
-                  2790
-                </span>
+            </div>
+            <div className="border-t border-slate-300 bg-[#c5e0b4] p-1.5 text-center">
+              <div className="text-[10px] font-bold uppercase text-[#274e13]">
+                {account.balance < 0 ? 'ADVANCE BALANCE' : 'TOTAL PENDING AMOUNT'}
+              </div>
+              <div
+                className={`mt-0.5 rounded-sm px-2 py-1 font-serif text-xl font-black text-white shadow-inner sm:text-2xl ${
+                  pendingAmount > 0 ? 'bg-[#c00000]' : 'bg-[#70ad47]'
+                }`}
+              >
+                {inr(account.balance < 0 ? -account.balance : pendingAmount)}
               </div>
             </div>
           </div>
 
-          {/* 4. DEFICITE DETAILS 4x3 GRID (Columns 10 to 12) */}
-          <div className="col-span-3 border border-slate-400 bg-[#adb9ca] flex flex-col justify-between text-xs font-serif">
-            {/* Header */}
-            <div className="bg-[#8faadc] text-slate-950 font-serif font-black text-xs text-center py-1.5 tracking-wider border-b border-slate-400">
+          {/* Deficit details */}
+          <div className="col-span-3 flex flex-col justify-between border border-slate-400 bg-[#adb9ca] font-serif text-xs">
+            <div className="border-b border-slate-400 bg-[#8faadc] py-1.5 text-center font-serif text-xs font-black tracking-wider text-slate-950">
               DEFICITE DETAILS
             </div>
-
-            {/* 3-Row Matrix Table */}
-            <div className="p-1 space-y-1">
-              {/* Row 1: Aug, Sep, Oct, Nov + Total D/F */}
-              <div className="grid grid-cols-5 gap-1 text-[10px] text-center">
-                <div className="bg-slate-100 p-0.5 rounded-xs">
-                  <div className="text-slate-500 font-medium">Aug-25</div>
-                  <div className="font-bold font-mono">370</div>
+            <div className="space-y-1 p-1">
+              {[0, 4, 8].map((start) => (
+                <div key={start} className="grid grid-cols-5 gap-1 text-center text-[10px]">
+                  {monthRows.slice(start, start + 4).map((r) => (
+                    <div key={r.key} className="rounded-sm bg-slate-100 p-0.5">
+                      <div className="font-medium text-slate-500">{monthTag(r.key)}</div>
+                      <div className="font-mono font-bold">{r.deficit ? Math.round(r.deficit.deficit) : 0}</div>
+                    </div>
+                  ))}
+                  {start === 0 && (
+                    <div className="rounded-sm bg-slate-200 p-0.5 text-[9px] font-bold">
+                      <div>BILLED</div>
+                      <div className="font-mono text-emerald-950">{inr(sessionTotals.billed)}</div>
+                    </div>
+                  )}
+                  {start === 4 && (
+                    <div className="rounded-sm bg-slate-200 p-0.5 text-[9px] font-bold">
+                      <div>PAID</div>
+                      <div className="font-mono text-slate-700">{inr(sessionTotals.applied)}</div>
+                    </div>
+                  )}
+                  {start === 8 && (
+                    <div className="flex flex-col justify-center rounded-sm bg-[#c00000] p-1 text-white">
+                      <div className="text-[8px] font-extrabold uppercase leading-tight">PENDING DF</div>
+                      <div className="font-mono text-xs font-black">{inr(sessionTotals.pending)}</div>
+                    </div>
+                  )}
                 </div>
-                <div className="bg-slate-100 p-0.5 rounded-xs">
-                  <div className="text-slate-500 font-medium">Sep-25</div>
-                  <div className="font-bold font-mono">330</div>
-                </div>
-                <div className="bg-slate-100 p-0.5 rounded-xs">
-                  <div className="text-slate-500 font-medium">Oct-25</div>
-                  <div className="font-bold font-mono">300</div>
-                </div>
-                <div className="bg-slate-100 p-0.5 rounded-xs">
-                  <div className="text-slate-500 font-medium">Nov-25</div>
-                  <div className="font-bold font-mono">390</div>
-                </div>
-                <div className="bg-slate-200 p-0.5 rounded-xs text-[9px] font-bold">
-                  <div>TOTAL D/F</div>
-                  <div className="font-mono text-emerald-950">₹1,390</div>
-                </div>
-              </div>
-
-              {/* Row 2: Dec, Jan, Feb, Mar + Paid D/F */}
-              <div className="grid grid-cols-5 gap-1 text-[10px] text-center">
-                <div className="bg-slate-100 p-0.5 rounded-xs">
-                  <div className="text-slate-500 font-medium">Dec-25</div>
-                  <div className="font-bold font-mono">0</div>
-                </div>
-                <div className="bg-slate-100 p-0.5 rounded-xs">
-                  <div className="text-slate-500 font-medium">Jan-26</div>
-                  <div className="font-bold font-mono">0</div>
-                </div>
-                <div className="bg-slate-100 p-0.5 rounded-xs">
-                  <div className="text-slate-500 font-medium">Feb-26</div>
-                  <div className="font-bold font-mono">0</div>
-                </div>
-                <div className="bg-slate-100 p-0.5 rounded-xs">
-                  <div className="text-slate-500 font-medium">Mar-26</div>
-                  <div className="font-bold font-mono">0</div>
-                </div>
-                <div className="bg-slate-200 p-0.5 rounded-xs text-[9px] font-bold">
-                  <div>PAID D/F</div>
-                  <div className="font-mono text-slate-700">₹0</div>
-                </div>
-              </div>
-
-              {/* Row 3: Apr, May, Jun, Jul + PENDING DF RED BOX */}
-              <div className="grid grid-cols-5 gap-1 text-[10px] text-center items-stretch">
-                <div className="bg-slate-100 p-0.5 rounded-xs">
-                  <div className="text-slate-500 font-medium">Apr-26</div>
-                  <div className="font-bold font-mono">0</div>
-                </div>
-                <div className="bg-slate-100 p-0.5 rounded-xs">
-                  <div className="text-slate-500 font-medium">May-26</div>
-                  <div className="font-bold font-mono">0</div>
-                </div>
-                <div className="bg-slate-100 p-0.5 rounded-xs">
-                  <div className="text-slate-500 font-medium">Jun-26</div>
-                  <div className="font-bold font-mono">0</div>
-                </div>
-                <div className="bg-slate-100 p-0.5 rounded-xs">
-                  <div className="text-slate-500 font-medium">Jul-26</div>
-                  <div className="font-bold font-mono">0</div>
-                </div>
-                <div className="bg-[#c00000] text-white p-1 rounded-xs flex flex-col justify-center">
-                  <div className="text-[8px] font-extrabold uppercase leading-tight">PENDING DF</div>
-                  <div className="font-mono font-black text-xs">₹1,390</div>
-                </div>
-              </div>
+              ))}
             </div>
           </div>
         </div>
 
-        {/* ========================================================================= */}
-        {/* MAIN DINING SPREADSHEET TABLE: EATEN DETAILS + PAYMENTS DETAILS          */}
-        {/* ========================================================================= */}
-        <div className="min-w-[1020px] border-2 border-slate-400 overflow-hidden font-sans text-xs">
+        {/* Main table */}
+        <div className="min-w-[1020px] overflow-hidden border-2 border-slate-400 font-sans text-xs">
           <table className="w-full border-collapse">
             <thead>
-              {/* Top Major Header Row */}
               <tr>
-                <th
-                  colSpan={33}
-                  className="bg-[#1f4e78] text-white font-serif font-black text-sm tracking-widest text-center py-2 border-r-2 border-white"
-                >
+                <th colSpan={33} className="border-r-2 border-white bg-[#1f4e78] py-2 text-center font-serif text-sm font-black tracking-widest text-white">
                   EATEN DETAILS
                 </th>
-                <th
-                  colSpan={5}
-                  className="bg-[#00b0f0] text-white font-serif font-black text-sm tracking-widest text-center py-2"
-                >
+                <th colSpan={5} className="bg-[#00b0f0] py-2 text-center font-serif text-sm font-black tracking-widest text-white">
                   PAYMENTS DETAILS
                 </th>
               </tr>
-
-              {/* Sub-header row with column names and days 1 to 31 */}
               <tr className="border-b-2 border-slate-400 text-center font-bold">
-                {/* Month */}
-                <th className="bg-[#2f5597] text-white p-1.5 w-16 border-r border-slate-300 font-serif">
-                  MONTH
-                </th>
-
-                {/* Days 1 to 31 */}
-                {Array.from({ length: 31 }, (_, i) => i + 1).map((d) => (
-                  <th
-                    key={d}
-                    className="bg-[#e2efda] text-[#375623] w-6 p-0.5 border-r border-slate-300 text-[11px] font-mono"
-                  >
+                <th className="w-16 border-r border-slate-300 bg-[#2f5597] p-1.5 font-serif text-white">MONTH</th>
+                {DAYS.map((d) => (
+                  <th key={d} className="w-6 border-r border-slate-300 bg-[#e2efda] p-0.5 font-mono text-[11px] text-[#375623]">
                     {d}
                   </th>
                 ))}
-
-                {/* Total Days Column */}
-                <th className="bg-[#00b0f0] text-white p-1.5 w-14 border-r-2 border-slate-400 font-serif font-black text-[11px]">
-                  TOTAL DAYS
-                </th>
-
-                {/* Payments Columns */}
-                <th className="bg-[#ed7d31] text-white p-1.5 w-14 border-r border-slate-300 font-bold text-[10px]">
-                  DAYS
-                </th>
-                <th className="bg-[#ed7d31] text-white p-1.5 w-20 border-r border-slate-300 font-bold text-[10px]">
-                  AMOUNT
-                </th>
-                <th className="bg-[#ed7d31] text-white p-1.5 w-24 border-r border-slate-300 font-bold text-[10px]">
-                  SLIP NO.
-                </th>
-                <th className="bg-[#ed7d31] text-white p-1.5 w-20 border-r border-slate-300 font-bold text-[10px]">
-                  SLIP DATE
-                </th>
-                <th className="bg-[#41719c] text-white p-1.5 w-20 font-bold text-[10px]">
-                  FULL PAYMENT
-                </th>
+                <th className="w-14 border-r-2 border-slate-400 bg-[#00b0f0] p-1.5 font-serif text-[11px] font-black text-white">TOTAL DAYS</th>
+                <th className="w-14 border-r border-slate-300 bg-[#ed7d31] p-1.5 text-[10px] font-bold text-white">DAYS</th>
+                <th className="w-20 border-r border-slate-300 bg-[#ed7d31] p-1.5 text-[10px] font-bold text-white">AMOUNT</th>
+                <th className="w-24 border-r border-slate-300 bg-[#ed7d31] p-1.5 text-[10px] font-bold text-white">SLIP NO.</th>
+                <th className="w-20 border-r border-slate-300 bg-[#ed7d31] p-1.5 text-[10px] font-bold text-white">SLIP DATE</th>
+                <th className="w-20 bg-[#41719c] p-1.5 text-[10px] font-bold text-white">MONTH BILL</th>
               </tr>
             </thead>
 
             <tbody className="divide-y divide-slate-300 text-center">
               {monthRows.map((row) => (
-                <tr key={row.monthKey} className="hover:bg-amber-50/30 transition">
-                  {/* Month Label */}
-                  <td className="bg-[#2f5597] text-white font-serif font-bold p-1 border-r border-slate-300 whitespace-nowrap text-xs">
-                    {row.monthLabel}
+                <tr key={row.key}>
+                  <td className="whitespace-nowrap border-r border-slate-300 bg-[#2f5597] p-1 font-serif text-xs font-bold text-white">
+                    {monthTag(row.key)}
                   </td>
 
-                  {/* 31 Days Cells */}
-                  {Array.from({ length: 31 }, (_, i) => i + 1).map((dayNum) => {
-                    const isWithinMonth = dayNum <= row.daysCount;
-                    if (!isWithinMonth) {
+                  {DAYS.map((d) => {
+                    if (d > row.daysCount) {
                       return (
-                        <td
-                          key={dayNum}
-                          className="bg-slate-200/50 border-r border-slate-200 p-0 text-slate-300 select-none"
-                        >
+                        <td key={d} className="select-none border-r border-slate-200 bg-slate-200/50 p-0 text-slate-300">
                           ·
                         </td>
                       );
                     }
+                    const dateKey = `${row.key}-${String(d).padStart(2, '0')}`;
+                    const future = dateKey > todayKey;
+                    const cell = cellOf(dateKey);
+                    const changed = dateKey in edits;
 
-                    const val = row.days[dayNum];
-                    const isEaten = val === 1 || val === 'SS';
-                    const isSpecial = val === 'SS';
+                    let style = 'bg-white text-slate-300 hover:bg-slate-100';
+                    if (future) style = 'bg-slate-100 text-slate-300 cursor-not-allowed';
+                    else if (cell === 1) style = 'bg-[#c6efce] text-[#006100] hover:bg-emerald-300';
+                    else if (cell === 'SS') style = 'bg-[#c6efce] text-amber-700 hover:bg-emerald-300';
+                    else if (cell === 0) style = 'bg-[#ffc7ce] text-[#9c0006] hover:bg-rose-300';
+                    else if (cell === 'R') style = 'bg-amber-300 text-amber-950 hover:bg-amber-400';
 
                     return (
                       <td
-                        key={dayNum}
-                        onClick={() => toggleCell(row.monthKey, dayNum)}
-                        title={`${row.monthLabel} Day ${dayNum}: Click to toggle`}
-                        className={`p-0 border-r border-slate-300 font-mono font-bold text-xs cursor-pointer select-none transition-colors ${
-                          isEaten
-                            ? isSpecial
-                              ? 'bg-[#c6efce] text-amber-700'
-                              : 'bg-[#c6efce] text-[#006100] hover:bg-emerald-300'
-                            : 'bg-[#ffc7ce] text-[#9c0006] hover:bg-rose-300'
+                        key={d}
+                        onClick={() => toggleCell(dateKey)}
+                        title={
+                          future
+                            ? `${dateKey}: not marked yet`
+                            : `${dateKey}: ${cell === 'R' ? 'mess off' : cell === null ? 'no entry' : cell === 0 ? 'not eaten' : 'eaten'}. Click to change`
+                        }
+                        className={`select-none border-r border-slate-300 p-0 font-mono text-xs font-bold ${future ? '' : 'cursor-pointer'} ${style} ${
+                          changed ? 'outline outline-2 -outline-offset-2 outline-sky-500' : ''
                         }`}
                       >
-                        <span className="inline-block w-full py-0.5 leading-none">
-                          {val !== undefined ? val : 0}
-                        </span>
+                        <span className="inline-block w-full py-0.5 leading-none">{future || cell === null ? '·' : cell}</span>
                       </td>
                     );
                   })}
 
-                  {/* Month Total Days Eaten (Cyan Cell) */}
-                  <td className="bg-[#00b0f0] text-white font-mono font-black text-sm p-1 border-r-2 border-slate-400">
-                    {row.totalDaysEaten}
-                  </td>
+                  <td className="border-r-2 border-slate-400 bg-[#00b0f0] p-1 font-mono text-sm font-black text-white">{row.eaten}</td>
 
-                  {/* PAYMENT: Days */}
-                  <td className="p-1 border-r border-slate-300 bg-white font-mono font-semibold text-slate-800">
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={row.paidDays}
-                      onChange={(e) =>
-                        updatePayment(row.monthKey, 'paidDays', parseFloat(e.target.value) || 0)
-                      }
-                      className="w-full text-center bg-transparent border-0 outline-none font-mono font-semibold text-xs text-slate-800 focus:bg-amber-50"
-                    />
+                  {/* Payments: the real slips of this month */}
+                  <td className="border-r border-slate-300 bg-white p-1 font-mono font-semibold text-slate-800">
+                    <div className="flex flex-col gap-0.5">
+                      {row.slips.length === 0 ? '0.00' : row.slips.map((s) => <span key={s.id}>{(s.amount / rate).toFixed(2)}</span>)}
+                    </div>
                   </td>
-
-                  {/* PAYMENT: Amount */}
-                  <td className="p-1 border-r border-slate-300 bg-white font-mono font-semibold text-slate-800">
-                    <input
-                      type="text"
-                      value={row.paidAmount > 0 ? `₹${row.paidAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '₹0.00'}
-                      onChange={(e) => {
-                        const num = parseFloat(e.target.value.replace(/[^0-9.]/g, '')) || 0;
-                        updatePayment(row.monthKey, 'paidAmount', num);
-                      }}
-                      className="w-full text-center bg-transparent border-0 outline-none font-mono font-semibold text-xs text-slate-800 focus:bg-amber-50"
-                    />
+                  <td className="border-r border-slate-300 bg-white p-1 font-mono font-semibold text-slate-800">
+                    <div className="flex flex-col gap-0.5">
+                      {row.slips.length === 0 ? '₹0' : row.slips.map((s) => <span key={s.id}>{inr(s.amount)}</span>)}
+                    </div>
                   </td>
-
-                  {/* PAYMENT: Slip No */}
-                  <td className="p-1 border-r border-slate-300 bg-white font-mono text-slate-700">
-                    <input
-                      type="text"
-                      value={row.slipNo}
-                      onChange={(e) => updatePayment(row.monthKey, 'slipNo', e.target.value)}
-                      className="w-full text-center bg-transparent border-0 outline-none font-mono text-xs text-slate-700 focus:bg-amber-50"
-                    />
+                  <td className="border-r border-slate-300 bg-white p-1 font-mono text-slate-700">
+                    <div className="flex flex-col gap-0.5">
+                      {row.slips.length === 0
+                        ? '—'
+                        : row.slips.map((s) => (
+                            <button
+                              key={s.id}
+                              type="button"
+                              disabled={!selected}
+                              onClick={() => selected && setPreview({ slip: s, student: selected })}
+                              title="Open this slip"
+                              className="press font-semibold text-sky-800 underline decoration-dotted underline-offset-2"
+                            >
+                              {s.book_no}/{s.slip_no}
+                            </button>
+                          ))}
+                    </div>
                   </td>
-
-                  {/* PAYMENT: Slip Date */}
-                  <td className="p-1 border-r border-slate-300 bg-white font-mono text-slate-700">
-                    <input
-                      type="text"
-                      value={row.slipDate}
-                      onChange={(e) => updatePayment(row.monthKey, 'slipDate', e.target.value)}
-                      className="w-full text-center bg-transparent border-0 outline-none font-mono text-xs text-slate-700 focus:bg-amber-50"
-                    />
+                  <td className="border-r border-slate-300 bg-white p-1 font-mono text-slate-700">
+                    <div className="flex flex-col gap-0.5">
+                      {row.slips.length === 0 ? '—' : row.slips.map((s) => <span key={s.id}>{slipDate(s.paid_on)}</span>)}
+                    </div>
                   </td>
-
-                  {/* PAYMENT: Full Payment */}
-                  <td className="p-1 bg-white font-mono font-bold text-slate-800">
-                    <input
-                      type="text"
-                      value={row.fullPayment > 0 ? `₹${row.fullPayment.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '₹0.00'}
-                      onChange={(e) => {
-                        const num = parseFloat(e.target.value.replace(/[^0-9.]/g, '')) || 0;
-                        updatePayment(row.monthKey, 'fullPayment', num);
-                      }}
-                      className="w-full text-center bg-transparent border-0 outline-none font-mono font-semibold text-xs text-slate-800 focus:bg-amber-50"
-                    />
-                  </td>
+                  <td className="bg-white p-1 font-mono font-bold text-slate-800">{row.bill ? inr(row.bill.total_amount) : '—'}</td>
                 </tr>
               ))}
 
-              {/* BOTTOM TOTAL SUMMARY ROW */}
               <tr className="border-t-2 border-slate-400 bg-slate-100 font-bold text-slate-900">
-                <td colSpan={32} className="p-2 text-right font-serif text-slate-700 border-r border-slate-300">
+                <td colSpan={32} className="border-r border-slate-300 p-2 text-right font-serif text-slate-700">
                   Total Eaten Days:
                 </td>
-                <td className="bg-slate-200 text-slate-950 font-serif font-black text-sm p-1 border-r-2 border-slate-400 text-center font-mono">
-                  {totalDaysEatenAll}
+                <td className="border-r-2 border-slate-400 bg-slate-200 p-1 text-center font-mono text-sm font-black text-slate-950">
+                  {eatenTotal}
                 </td>
-                <td className="bg-slate-200 text-slate-950 font-mono font-black text-xs p-1 border-r border-slate-300 text-center">
-                  {totalDaysPaidAll.toFixed(2)}
+                <td className="border-r border-slate-300 bg-slate-200 p-1 text-center font-mono text-xs font-black text-slate-950">
+                  {paidDaysTotal.toFixed(2)}
                 </td>
-                <td colSpan={4} className="p-1 bg-slate-100 text-right pr-4 text-xs font-serif text-slate-600">
-                  Balance Days: <span className="font-mono font-black text-slate-900 text-sm ml-1">{currentBalanceDays} Days</span>
+                <td colSpan={4} className="bg-slate-100 p-1 pr-4 text-right font-serif text-xs text-slate-600">
+                  Account balance: <span className="ml-1 font-mono text-sm font-black text-slate-900">{balanceDays} Days</span>
                 </td>
               </tr>
             </tbody>
           </table>
         </div>
 
-        {/* Quick Month Fill Tools */}
-        <div className="no-print mt-4 p-3 bg-slate-50 border border-slate-300 rounded-xl flex flex-wrap items-center justify-between gap-3 text-xs">
-          <div className="flex items-center gap-2">
-            <span className="font-bold text-slate-700">Quick Month Attendance Fill:</span>
-            <span className="text-slate-500">Pick a month to mark all days as 1 (Eaten) or 0 (Not Eaten)</span>
-          </div>
-          <div className="flex flex-wrap items-center gap-1.5">
-            {monthRows.slice(0, 6).map((m) => (
-              <div key={m.monthKey} className="flex items-center rounded-lg border border-slate-300 overflow-hidden">
-                <span className="bg-slate-200 px-2 py-0.5 font-bold text-[11px] text-slate-700">{m.monthLabel}</span>
-                <button
-                  type="button"
-                  onClick={() => setMonthAll(m.monthKey, 1)}
-                  className="px-1.5 py-0.5 bg-emerald-100 text-emerald-800 hover:bg-emerald-200 font-bold text-[10px]"
-                  title="Mark all days as 1"
-                >
-                  All 1
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setMonthAll(m.monthKey, 0)}
-                  className="px-1.5 py-0.5 bg-rose-100 text-rose-800 hover:bg-rose-200 font-bold text-[10px]"
-                  title="Mark all days as 0"
-                >
-                  All 0
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-
+        <p className="no-print mt-3 text-[11px] text-slate-500">
+          <b>1</b> eaten · <b>0</b> not eaten · <b>SS</b> eaten with guest diet · <b>R</b> mess off · <b>·</b> no entry or day not reached.
+          Click a day to change it, then save. Payments come from the slips you cut; use <b>Cut slip</b> to add one.
+        </p>
       </div>
 
       <CloseDiningModal
         isOpen={closeDiningOpen}
         onClose={() => setCloseDiningOpen(false)}
-        student={selectedStudent}
+        student={selected}
         students={students}
-        onSuccess={(updatedStudent, actualStartDate) => {
+        onSuccess={() => {
           setSaveSuccess(true);
           setTimeout(() => setSaveSuccess(false), 4000);
-          // Trigger reload for this student
-          setSelectedStudent({ ...updatedStudent });
+          setReloadTick((t) => t + 1);
         }}
       />
+
+      <SlipModal data={preview} onClose={() => setPreview(null)} />
     </div>
   );
 };

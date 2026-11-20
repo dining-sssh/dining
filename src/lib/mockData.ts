@@ -128,6 +128,18 @@ export const INITIAL_STUDENTS: Student[] = [
     phone: '+91 9876543217',
     session: '2026-2027',
     status: 'active'
+  },
+  {
+    id: 's-aarif',
+    enrollment_no: 'GQ0103',
+    name: 'Aarif Khan',
+    house: 'HM',
+    room_no: '17',
+    course: 'B.Tech',
+    email: 'iamaakoji@gmail.com',
+    previous_room: 'New Allotment',
+    session: '2026-2027',
+    status: 'active'
   }
 ];
 
@@ -202,7 +214,7 @@ export function generateInitialLedger(students: Student[]): { bills: MonthlyBill
     months.push({
       name: `${MONTH_NAMES[m - 1]} ${y}`,
       key: `${y}-${pad2(m)}`,
-      session: m >= 7 ? `${y}-${y + 1}` : `${y - 1}-${y}`,
+      session: m >= 8 ? `${y}-${y + 1}` : `${y - 1}-${y}`,
       days: new Date(y, m, 0).getDate()
     });
     m += 1;

@@ -55,3 +55,102 @@ export function rupeesInWords(amount: number): string {
 
   return `${parts.join(' ')} Rupees Only`;
 }
+
+export interface LedgerEntry {
+  id: string;
+  date: string; // YYYY-MM-DD
+  kind: 'charge' | 'deposit';
+  label: string;
+  detail?: string;
+  /** Added to the deficit (monthly bill). */
+  debit: number;
+  /** Reduces the deficit (deposit slip). */
+  credit: number;
+  /** Running balance after this entry. Positive = deficit, negative = advance. */
+  balance: number;
+  slip?: PaymentSlip;
+}
+
+/**
+ * One chronological statement from the monthly bills (charges) and the deposit slips (credits).
+ * A month's bill is dated on its last day; the running month is dated today.
+ */
+export function buildLedger(bills: MonthlyBill[], slips: PaymentSlip[], todayKey: string): LedgerEntry[] {
+  type Raw = Omit<LedgerEntry, 'balance'>;
+  const raw: Raw[] = [];
+
+  bills.forEach((b) => {
+    const [y, m] = b.month_key.split('-').map(Number);
+    const monthEnd = `${b.month_key}-${String(new Date(y, m, 0).getDate()).padStart(2, '0')}`;
+    const running = monthEnd > todayKey;
+    raw.push({
+      id: `charge-${b.id}`,
+      date: running ? todayKey : monthEnd,
+      kind: 'charge',
+      label: `${b.month_name} dining bill`,
+      detail: `${b.total_diets} diets${running ? ' · month running' : ''}`,
+      debit: b.total_amount || 0,
+      credit: 0
+    });
+  });
+
+  slips.forEach((s) =>
+    raw.push({
+      id: `deposit-${s.id}`,
+      date: s.paid_on,
+      kind: 'deposit',
+      label: `Deposit · R. No. ${s.slip_no}`,
+      detail: `Book ${s.book_no}`,
+      debit: 0,
+      credit: s.amount || 0,
+      slip: s
+    })
+  );
+
+  raw.sort((a, b) => a.date.localeCompare(b.date) || (a.kind === b.kind ? 0 : a.kind === 'charge' ? -1 : 1) || a.id.localeCompare(b.id));
+
+  let balance = 0;
+  return raw.map((e) => {
+    balance += e.debit - e.credit;
+    return { ...e, balance };
+  });
+}
+
+/** Suggested Book No. and R. No. for the next slip: one more than the highest R. No. issued so far. */
+export function nextSlipNumbers(slips: PaymentSlip[]): { bookNo: string; slipNo: string } {
+  let top: PaymentSlip | null = null;
+  slips.forEach((s) => {
+    if (!top || Number(s.slip_no) > Number(top.slip_no)) top = s;
+  });
+  const last = top as PaymentSlip | null;
+  return last
+    ? { bookNo: last.book_no, slipNo: String((Number(last.slip_no) || 0) + 1) }
+    : { bookNo: '1', slipNo: '1' };
+}
+export interface BillDeficit {
+  bill: MonthlyBill;
+  /** Part of this month's bill covered by deposits. */
+  applied: number;
+  /** Part still unpaid. This is the month's deficit. */
+  deficit: number;
+}
+
+/**
+ * Deposits are applied to the oldest bill first, so each month ends up with a deficit (what is still
+ * unpaid for that month). The deficits add up to the pending deficit; anything left over is the advance.
+ */
+export function allocateDeficits(
+  bills: MonthlyBill[],
+  slips: PaymentSlip[]
+): { months: BillDeficit[]; pending: number; advance: number } {
+  let pool = slips.reduce((acc, s) => acc + (s.amount || 0), 0);
+  const months = [...bills]
+    .sort((a, b) => a.month_key.localeCompare(b.month_key))
+    .map((bill) => {
+      const total = bill.total_amount || 0;
+      const applied = Math.min(total, pool);
+      pool -= applied;
+      return { bill, applied, deficit: total - applied };
+    });
+  return { months, pending: months.reduce((acc, m) => acc + m.deficit, 0), advance: pool };
+}

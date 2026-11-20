@@ -195,12 +195,12 @@ export function computeMonthStats(records: DiningDailyRecord[], monthKey: string
 /* Session helpers                                                     */
 /* ------------------------------------------------------------------ */
 
-/** "2026-2027" -> ["2026-07", ... "2027-06"] (an academic session runs July to June). */
+/** "2026-2027" -> ["2026-08", ... "2027-07"]. The dining year runs August to July, like the Munshi register. */
 export function sessionMonths(session: string): string[] {
   const startYear = Number(session.split('-')[0]);
   return Array.from({ length: 12 }, (_, i) => {
-    const m = ((6 + i) % 12) + 1;
-    const y = m >= 7 ? startYear : startYear + 1;
+    const m = ((7 + i) % 12) + 1;
+    const y = m >= 8 ? startYear : startYear + 1;
     return `${y}-${pad(m)}`;
   });
 }
@@ -228,9 +228,9 @@ export function groupAttendanceByMonth(records: DiningDailyRecord[]): Map<string
   });
   return map;
 }
-/** "2026-11-20" -> "2026-2027" (sessions start in July). */
+/** "2026-11-20" -> "2026-2027" (the dining year starts in August). */
 export function sessionOfDate(dateKey: string): string {
   const [y, m] = dateKey.split('-').map(Number);
-  const start = m >= 7 ? y : y - 1;
+  const start = m >= 8 ? y : y - 1;
   return `${start}-${start + 1}`;
 }

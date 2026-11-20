@@ -85,7 +85,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({ enforcedStudentId,
   const loadStudentData = useCallback(async (student: Student) => {
     const token = ++latestLoad.current;
     const [allDaily, allRebates, studentBills, studentSlips, allReviews] = await Promise.all([
-      DataService.getAllDailyRecords(),
+      DataService.getAllDailyRecords({ studentId: student.id }),
       DataService.getRebateRequests(),
       DataService.getBillsForStudent(student.enrollment_no),
       DataService.getPaymentSlipsForStudent(student.enrollment_no),
@@ -93,7 +93,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({ enforcedStudentId,
     ]);
     if (token !== latestLoad.current) return; // a newer load started (student switched)
 
-    setRecords(allDaily.filter((r) => r.student_id === student.id));
+    setRecords(allDaily);
     setRebates(allRebates.filter((r) => r.student_id === student.id || r.enrollment_no === student.enrollment_no));
     setBills(studentBills);
     setSlips(studentSlips);

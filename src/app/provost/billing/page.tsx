@@ -1,18 +1,42 @@
 'use client';
 
 import React, { useMemo, useState } from 'react';
-import { Clock, IndianRupee, Search, Wallet } from 'lucide-react';
+import { CheckCircle2, Clock, FilePlus2, IndianRupee, Search, Wallet } from 'lucide-react';
+import { DataService } from '@/lib/dataService';
 import { formatDMY, formatMoney } from '@/lib/billingUtils';
 import { useProvostData } from '@/components/provost/ProvostData';
-import { BTN_GHOST, Card, EmptyState, INPUT, PageHeader, StatCard } from '@/components/admin/ui';
+import { BTN_GHOST, BTN_PRIMARY, Card, EmptyState, INPUT, PageHeader, StatCard } from '@/components/admin/ui';
+import { toDateKey } from '@/components/student/studentUtils';
 
 const PAGE = 25;
 
 export default function ProvostBillingPage() {
-  const { bills, slips, students, totalPendingDues } = useProvostData();
+  const { bills, slips, students, totalPendingDues, reload } = useProvostData();
   const [query, setQuery] = useState('');
   const [month, setMonth] = useState('ALL');
   const [limit, setLimit] = useState(PAGE);
+
+  // Live database only: bills are made from the day-wise register and the current rates.
+  const live = DataService.isLiveSupabase();
+  const [genMonth, setGenMonth] = useState(() => toDateKey(new Date()).slice(0, 7));
+  const [generating, setGenerating] = useState(false);
+  const [genMessage, setGenMessage] = useState('');
+  const [genError, setGenError] = useState('');
+
+  const generate = async () => {
+    setGenerating(true);
+    setGenMessage('');
+    setGenError('');
+    try {
+      const count = await DataService.generateBills(genMonth);
+      await reload();
+      setGenMessage(`Bills for ${genMonth} are ready for ${count} students.`);
+    } catch (e) {
+      setGenError(e instanceof Error ? e.message : 'Could not generate bills.');
+    } finally {
+      setGenerating(false);
+    }
+  };
 
   const nameByStudent = useMemo(() => new Map(students.map((s) => [s.id, s.name])), [students]);
 
@@ -50,6 +74,37 @@ export default function ProvostBillingPage() {
         <StatCard label="Deposited" value={formatMoney(totalPaid)} icon={Wallet} tone="emerald" />
         <StatCard label="Pending" value={formatMoney(totalPendingDues)} icon={Clock} tone="amber" />
       </div>
+
+      {live && (
+        <Card className="space-y-3">
+          <div>
+            <h2 className="text-sm font-bold text-slate-900">Generate monthly bills</h2>
+            <p className="text-xs text-slate-500">
+              Builds every active student's bill for the month from the dining register and the current rates. Running it again refreshes the amounts.
+            </p>
+          </div>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+            <input
+              type="month"
+              value={genMonth}
+              onChange={(e) => setGenMonth(e.target.value)}
+              aria-label="Month"
+              className={`${INPUT} sm:w-56`}
+            />
+            <button type="button" onClick={generate} disabled={generating || !genMonth} className={BTN_PRIMARY}>
+              <FilePlus2 className="h-4 w-4" />
+              {generating ? 'Generating…' : 'Generate bills'}
+            </button>
+          </div>
+          {genMessage && (
+            <p className="flex items-center gap-2 text-xs font-semibold text-emerald-800">
+              <CheckCircle2 className="h-4 w-4" />
+              {genMessage}
+            </p>
+          )}
+          {genError && <p className="text-xs font-semibold text-rose-700">{genError}</p>}
+        </Card>
+      )}
 
       <Card className="space-y-4">
         <div className="flex flex-col gap-3 sm:flex-row">

@@ -1,13 +1,14 @@
 'use client';
 
 import React from 'react';
-import { FileSpreadsheet, Grid3x3, Users, Utensils } from 'lucide-react';
+import { FileSpreadsheet, Grid3x3, Receipt, Users, Utensils } from 'lucide-react';
 import { AuthGuard } from '@/components/auth/AuthGuard';
 import { AdminShell, AdminNavItem } from '@/components/admin/AdminShell';
 import { ProvostDataProvider } from '@/components/provost/ProvostData';
 
 const NAV: AdminNavItem[] = [
   { href: '/munshi', label: 'Dining Ledger', icon: FileSpreadsheet, exact: true },
+  { href: '/munshi/slips', label: 'Cut Slip', icon: Receipt },
   { href: '/munshi/students', label: 'Students', icon: Users },
   { href: '/munshi/matrix', label: 'Month Matrix', icon: Grid3x3 },
   { href: '/munshi/reviews', label: 'Food & Cleanliness', icon: Utensils }

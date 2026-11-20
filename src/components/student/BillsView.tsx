@@ -3,9 +3,10 @@
 import React, { useMemo, useState } from 'react';
 import { ChevronDown, Download, FileText } from 'lucide-react';
 import { MonthlyBill, PaymentSlip, Student } from '@/types';
-import { formatDMY, formatMoney, summarizeAccount } from '@/lib/billingUtils';
+import { allocateDeficits, formatDMY, formatMoney, summarizeAccount } from '@/lib/billingUtils';
 import { SlipData } from '@/lib/foodSlip';
 import { SlipModal } from './SlipModal';
+import { LedgerStatement } from '../ledger/LedgerStatement';
 
 interface BillsViewProps {
   student: Student;
@@ -23,15 +24,20 @@ export const BillsView: React.FC<BillsViewProps> = ({ student, bills, slips, tod
   const sortedBills = useMemo(() => [...bills].sort((a, b) => b.month_key.localeCompare(a.month_key)), [bills]);
   const sortedSlips = useMemo(() => [...slips].sort((a, b) => b.paid_on.localeCompare(a.paid_on)), [slips]);
   const account = useMemo(() => summarizeAccount(bills, slips), [bills, slips]);
+  // Deposits are applied to the oldest bill first; what is left unpaid on each bill is that month's deficit.
+  const allocation = useMemo(() => allocateDeficits(bills, slips), [bills, slips]);
 
   const [monthKey, setMonthKey] = useState(todayMonth);
   const [showBreakdown, setShowBreakdown] = useState(false);
   const [planDays, setPlanDays] = useState(PLAN_DAYS[1]);
   const [showAllSlips, setShowAllSlips] = useState(false);
   const [preview, setPreview] = useState<SlipData | null>(null);
+  const [showStatement, setShowStatement] = useState(false);
 
   const bill = sortedBills.find((b) => b.month_key === monthKey) ?? sortedBills[0];
   const hasDeficit = account.balance > 0;
+  const monthShare = allocation.months.find((m) => m.bill.id === bill?.id);
+  const monthDeficit = monthShare?.deficit ?? 0;
   const rate = sortedBills[0]?.diet_rate ?? 65;
 
   // Estimated amount to deposit so the deficit is cleared and the chosen number of days is covered.
@@ -86,7 +92,7 @@ export const BillsView: React.FC<BillsViewProps> = ({ student, bills, slips, tod
                 className="press flex h-28 w-full flex-col items-center justify-center rounded-2xl border-2 border-amber-400/70 bg-amber-200 px-2 text-center shadow-sm"
               >
                 <span className="text-[11px] font-semibold text-amber-900/80">Deficit · {bill.month_name}</span>
-                <span className="mt-1 text-3xl font-black text-slate-900">{formatMoney(bill.total_amount)}</span>
+                <span className="mt-1 text-3xl font-black text-slate-900">{formatMoney(monthDeficit)}</span>
                 <span className="mt-1 text-[10px] font-semibold text-amber-900/70">
                   {showBreakdown ? 'Hide details' : 'Tap for details'}
                 </span>
@@ -119,9 +125,17 @@ export const BillsView: React.FC<BillsViewProps> = ({ student, bills, slips, tod
                 <Row label="Fixed dining charges" value={bill.fixed_charges} />
                 <Row label="Establishment charges" value={bill.establishment_charges} />
                 {bill.extras > 0 && <Row label="Extras" value={bill.extras} />}
+                <div className="flex justify-between border-t border-slate-200 pt-2 font-bold text-slate-900">
+                  <dt>Month bill</dt>
+                  <dd>{formatMoney(bill.total_amount)}</dd>
+                </div>
+                <div className="flex justify-between text-emerald-700">
+                  <dt>Paid against this month</dt>
+                  <dd className="font-semibold">− {formatMoney(monthShare?.applied ?? 0)}</dd>
+                </div>
                 <div className="flex justify-between border-t border-slate-200 pt-2 text-sm font-extrabold text-slate-900">
                   <dt>Month deficit</dt>
-                  <dd>{formatMoney(bill.total_amount)}</dd>
+                  <dd>{formatMoney(monthDeficit)}</dd>
                 </div>
               </dl>
               {bill.rebate_days > 0 && (
@@ -224,6 +238,32 @@ export const BillsView: React.FC<BillsViewProps> = ({ student, bills, slips, tod
             <FileText className="h-3.5 w-3.5" />
             {showAllSlips ? 'Show fewer' : `Show all ${sortedSlips.length} slips`}
           </button>
+        )}
+      </section>
+
+      {/* Full account statement */}
+      <section className="rounded-3xl border border-white bg-white p-4 shadow-lg shadow-emerald-950/5">
+        <button
+          type="button"
+          onClick={() => setShowStatement((v) => !v)}
+          aria-expanded={showStatement}
+          className="press flex w-full items-center justify-between text-left"
+        >
+          <span>
+            <span className="block text-sm font-bold text-slate-900">Account statement</span>
+            <span className="block text-[11px] text-slate-500">Every bill and deposit with the running balance</span>
+          </span>
+          <ChevronDown className={`h-5 w-5 text-slate-500 transition-transform ${showStatement ? 'rotate-180' : ''}`} />
+        </button>
+        {showStatement && (
+          <div className="fade-enter mt-3">
+            <LedgerStatement
+              bills={bills}
+              slips={slips}
+              todayKey={todayKey}
+              onOpenSlip={(slip) => setPreview({ slip, student })}
+            />
+          </div>
         )}
       </section>
 
