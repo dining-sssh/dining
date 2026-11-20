@@ -76,7 +76,7 @@ To connect your live Supabase database:
 2. Go to the **SQL Editor** tab in your Supabase dashboard.
 3. Open `supabase/schema.sql` from this repository, copy its content, and execute it in Supabase.
 4. Copy your **Project URL** and **anon public key** from `Project Settings -> API`.
-5. Open `.env.local` and paste your credentials:
+5. Open `.env.local` and paste your credentials:-
    ```env
    NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
    NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
