@@ -23,6 +23,7 @@ import {
 } from '@/types';
 import { DataService } from '@/lib/dataService';
 import { ReviewFormModal } from './ReviewFormModal';
+import { toDateKey } from '../student/studentUtils';
 
 interface DailyReviewReportProps {
   userRole?: UserRole; // 'student' | 'provost' | 'munshi'
@@ -36,7 +37,7 @@ export const DailyReviewReport: React.FC<DailyReviewReportProps> = ({
   activeStudent,
   showSubmitButton = true
 }) => {
-  const todayStr = useMemo(() => new Date().toISOString().split('T')[0], []);
+  const todayStr = useMemo(() => toDateKey(new Date()), []);
   const formattedToday = useMemo(
     () => new Date().toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }),
     []
@@ -121,9 +122,9 @@ export const DailyReviewReport: React.FC<DailyReviewReportProps> = ({
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       {/* Top Banner: Current Date & Header */}
-      <div className="bg-white rounded-3xl p-6 sm:p-7 shadow-sm border border-slate-200">
+      <div className="bg-white rounded-3xl p-4 sm:p-6 lg:p-7 shadow-sm border border-slate-200">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 pb-5 border-b border-slate-100">
           <div>
             <div className="flex items-center gap-2 mb-1">
@@ -134,7 +135,7 @@ export const DailyReviewReport: React.FC<DailyReviewReportProps> = ({
                 Daily Dining & Hygiene Audit
               </span>
             </div>
-            <h2 className="text-xl sm:text-2xl font-black text-slate-900">
+            <h2 className="text-lg sm:text-2xl font-black text-slate-900">
               Daily Food Reviews & House Cleanliness Report
             </h2>
             <p className="text-xs text-slate-500 mt-1">
@@ -143,7 +144,7 @@ export const DailyReviewReport: React.FC<DailyReviewReportProps> = ({
           </div>
 
           {/* Current Date Badge & Submit Action */}
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex w-full flex-wrap items-center gap-2 md:w-auto">
             <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 text-emerald-950 px-3.5 py-2 rounded-2xl text-xs font-bold shadow-xs">
               <Calendar className="w-4 h-4 text-emerald-700" />
               <span>Current Date: {formattedToday}</span>
@@ -153,7 +154,7 @@ export const DailyReviewReport: React.FC<DailyReviewReportProps> = ({
               <button
                 type="button"
                 onClick={() => setIsModalOpen(true)}
-                className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-emerald-800 to-teal-800 hover:from-emerald-900 hover:to-teal-900 text-white text-xs font-bold rounded-xl shadow-sm transition"
+                className="flex flex-1 items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-emerald-800 to-teal-800 hover:from-emerald-900 hover:to-teal-900 text-white text-xs font-bold rounded-xl shadow-sm transition md:flex-none"
               >
                 <Plus className="w-4 h-4" />
                 <span>Rate Food & Cleanliness</span>
@@ -165,7 +166,7 @@ export const DailyReviewReport: React.FC<DailyReviewReportProps> = ({
         {/* 5 Core Metric Cards: Overall Score + 4 Parameters */}
         <div className="grid grid-cols-2 lg:grid-cols-5 gap-3.5 mt-6">
           {/* Daily Overall Score */}
-          <div className="col-span-2 lg:col-span-1 bg-gradient-to-br from-emerald-900 to-teal-950 text-white rounded-2xl p-4.5 shadow-md flex flex-col justify-between">
+          <div className="col-span-2 lg:col-span-1 bg-gradient-to-br from-emerald-900 to-teal-950 text-white rounded-2xl p-4 shadow-md flex flex-col justify-between">
             <div>
               <div className="flex items-center justify-between text-xs text-emerald-200">
                 <span className="font-semibold uppercase tracking-wider text-[10px]">Daily Overall Score</span>
@@ -279,7 +280,7 @@ export const DailyReviewReport: React.FC<DailyReviewReportProps> = ({
       </div>
 
       {/* House-wise Cleanliness Section (Special requirement) */}
-      <div className="bg-white rounded-3xl p-6 sm:p-7 shadow-sm border border-slate-200">
+      <div className="bg-white rounded-3xl p-4 sm:p-6 lg:p-7 shadow-sm border border-slate-200">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100">
           <div>
             <div className="flex items-center gap-2">
@@ -369,7 +370,7 @@ export const DailyReviewReport: React.FC<DailyReviewReportProps> = ({
       </div>
 
       {/* Student Reviews Feed & Feedback Section */}
-      <div className="bg-white rounded-3xl p-6 sm:p-7 shadow-sm border border-slate-200">
+      <div className="bg-white rounded-3xl p-4 sm:p-6 lg:p-7 shadow-sm border border-slate-200">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100">
           <div>
             <div className="flex items-center gap-2">
@@ -384,14 +385,14 @@ export const DailyReviewReport: React.FC<DailyReviewReportProps> = ({
           </div>
 
           {/* Filters */}
-          <div className="flex flex-wrap items-center gap-2 text-xs">
+          <div className="grid w-full grid-cols-2 items-center gap-2 text-xs sm:flex sm:w-auto sm:flex-wrap">
             {/* Filter by House */}
-            <div className="flex items-center gap-1.5">
+            <div className="flex min-w-0 items-center gap-1.5">
               <span className="text-slate-500 font-semibold">House:</span>
               <select
                 value={selectedHouseFilter}
                 onChange={(e) => setSelectedHouseFilter(e.target.value)}
-                className="px-2.5 py-1.5 rounded-xl border border-slate-300 bg-white font-semibold text-slate-800 outline-none focus:ring-2 focus:ring-emerald-600"
+                className="min-w-0 flex-1 px-2.5 py-2 rounded-xl border border-slate-300 bg-white font-semibold text-slate-800 outline-none focus:ring-2 focus:ring-emerald-600 sm:flex-none sm:py-1.5"
               >
                 <option value="ALL">All Houses</option>
                 {(Object.keys(HOSTEL_HOUSES) as HostelHouseCode[]).map((code) => (
@@ -403,12 +404,12 @@ export const DailyReviewReport: React.FC<DailyReviewReportProps> = ({
             </div>
 
             {/* Filter by Meal */}
-            <div className="flex items-center gap-1.5">
+            <div className="flex min-w-0 items-center gap-1.5">
               <span className="text-slate-500 font-semibold">Meal:</span>
               <select
                 value={selectedMealFilter}
                 onChange={(e) => setSelectedMealFilter(e.target.value)}
-                className="px-2.5 py-1.5 rounded-xl border border-slate-300 bg-white font-semibold text-slate-800 outline-none focus:ring-2 focus:ring-emerald-600"
+                className="min-w-0 flex-1 px-2.5 py-2 rounded-xl border border-slate-300 bg-white font-semibold text-slate-800 outline-none focus:ring-2 focus:ring-emerald-600 sm:flex-none sm:py-1.5"
               >
                 <option value="ALL">All Meals</option>
                 <option value="lunch">Lunch</option>
@@ -454,7 +455,7 @@ export const DailyReviewReport: React.FC<DailyReviewReportProps> = ({
                         {rev.student_name.slice(0, 2).toUpperCase()}
                       </div>
                       <div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
                           <span className="text-sm font-bold text-slate-900">
                             {rev.student_name}
                           </span>
@@ -524,7 +525,7 @@ export const DailyReviewReport: React.FC<DailyReviewReportProps> = ({
 
                   {/* Comments */}
                   {rev.comments && (
-                    <div className="mt-3 p-3 bg-slate-50 rounded-xl text-xs text-slate-700 italic border-l-3 border-emerald-600">
+                    <div className="mt-3 p-3 bg-slate-50 rounded-xl text-xs text-slate-700 italic border-l-4 border-emerald-600">
                       "{rev.comments}"
                     </div>
                   )}

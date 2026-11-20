@@ -20,7 +20,7 @@ import {
   Utensils,
   Star
 } from 'lucide-react';
-import { Student, HostelHouseCode, HOSTEL_HOUSES, MonthlyBill, RebateRequest, MessSettings, DailyReviewSummary } from '@/types';
+import { Student, HostelHouseCode, HOSTEL_HOUSES, MonthlyBill, PaymentSlip, RebateRequest, MessSettings, DailyReviewSummary } from '@/types';
 import { DataService } from '@/lib/dataService';
 import { CsvUploadModal } from '../csv/CsvUploadModal';
 import { AddStudentModal } from './AddStudentModal';
@@ -29,6 +29,7 @@ import { DailyReviewReport } from '../reviews/DailyReviewReport';
 export const ProvostDashboard: React.FC = () => {
   const [students, setStudents] = useState<Student[]>([]);
   const [bills, setBills] = useState<MonthlyBill[]>([]);
+  const [slips, setSlips] = useState<PaymentSlip[]>([]);
   const [rebates, setRebates] = useState<RebateRequest[]>([]);
   const [settings, setSettings] = useState<MessSettings | null>(null);
   const [todayReviewSummary, setTodayReviewSummary] = useState<DailyReviewSummary | null>(null);
@@ -48,15 +49,17 @@ export const ProvostDashboard: React.FC = () => {
 
   const loadAllData = async () => {
     const todayStr = new Date().toISOString().split('T')[0];
-    const [st, bl, rb, stg, revSummary] = await Promise.all([
+    const [st, bl, sl, rb, stg, revSummary] = await Promise.all([
       DataService.getStudents(),
       DataService.getMonthlyBills(),
+      DataService.getPaymentSlips(),
       DataService.getRebateRequests(),
       DataService.getSettings(),
       DataService.getDailyReviewSummary(todayStr)
     ]);
     setStudents(st);
     setBills(bl);
+    setSlips(sl);
     setRebates(rb);
     setSettings(stg);
     setRateForm(stg);
@@ -99,7 +102,11 @@ export const ProvostDashboard: React.FC = () => {
   const totalStudents = students.length;
   const totalDietsServed = bills.reduce((acc, b) => acc + (b.total_diets || 0), 0);
   const totalRevenue = bills.reduce((acc, b) => acc + (b.total_amount || 0), 0);
-  const totalPendingDues = bills.filter(b => b.status !== 'paid').reduce((acc, b) => acc + (b.total_amount || 0), 0);
+  // Deficit = everything charged minus everything deposited (same figure the student sees under Bills).
+  const deficitByStudent = new Map<string, number>();
+  bills.forEach(b => deficitByStudent.set(b.student_id, (deficitByStudent.get(b.student_id) || 0) + (b.total_amount || 0)));
+  slips.forEach(s => deficitByStudent.set(s.student_id, (deficitByStudent.get(s.student_id) || 0) - (s.amount || 0)));
+  const totalPendingDues = Array.from(deficitByStudent.values()).reduce((acc, v) => acc + Math.max(v, 0), 0);
 
   // House-wise stats
   const houseCounts: Record<HostelHouseCode, number> = {
@@ -400,9 +407,7 @@ export const ProvostDashboard: React.FC = () => {
                   ) : (
                     filteredStudents.map((student) => {
                       const houseInfo = HOSTEL_HOUSES[student.house];
-                      const studentDeficit = bills
-                        .filter(b => b.student_id === student.id && b.status !== 'paid')
-                        .reduce((acc, b) => acc + (b.total_amount || 0), 0);
+                      const studentDeficit = Math.max(deficitByStudent.get(student.id) || 0, 0);
 
                       return (
                         <tr key={student.id} className="hover:bg-slate-50/80 transition">

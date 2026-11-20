@@ -13,7 +13,7 @@ interface StudentHeaderProps {
   onBellClick: () => void;
 }
 
-export const StudentHeader: React.FC<StudentHeaderProps> = ({ hasAlerts, onBellClick }) => (
+export const StudentHeader: React.FC<StudentHeaderProps> = React.memo(({ hasAlerts, onBellClick }) => (
   <header className="no-print relative pb-1 pt-1">
     <div className="flex items-center justify-between">
       <div className="flex items-center gap-2.5">
@@ -31,7 +31,7 @@ export const StudentHeader: React.FC<StudentHeaderProps> = ({ hasAlerts, onBellC
         type="button"
         onClick={onBellClick}
         aria-label={hasAlerts ? 'Notifications (pending items)' : 'Notifications'}
-        className="relative flex h-11 w-11 items-center justify-center rounded-full bg-white/80 text-emerald-950 shadow-sm ring-1 ring-emerald-900/10 transition hover:bg-white"
+        className="press relative flex h-11 w-11 items-center justify-center rounded-full bg-white text-emerald-950 shadow-sm ring-1 ring-emerald-900/10"
       >
         <Bell className="h-5 w-5" />
         {hasAlerts && <span className="absolute right-2.5 top-2.5 h-2.5 w-2.5 rounded-full bg-rose-500 ring-2 ring-white" />}
@@ -47,7 +47,8 @@ export const StudentHeader: React.FC<StudentHeaderProps> = ({ hasAlerts, onBellC
       </div>
     </div>
   </header>
-);
+));
+StudentHeader.displayName = 'StudentHeader';
 
 /* ------------------------------------------------------------------ */
 /* Bottom navigation                                                   */
@@ -68,10 +69,11 @@ interface BottomNavProps {
   onChange: (tab: StudentTab) => void;
 }
 
-export const BottomNav: React.FC<BottomNavProps> = ({ active, onChange }) => (
+// No backdrop-filter here: blurring what scrolls behind a fixed bar is the most common cause of jank on phones.
+export const BottomNav: React.FC<BottomNavProps> = React.memo(({ active, onChange }) => (
   <nav
     aria-label="Student sections"
-    className="no-print fixed bottom-4 left-1/2 z-40 w-[calc(100%-2rem)] max-w-md -translate-x-1/2 rounded-full border border-white/80 bg-white/90 p-1.5 shadow-xl shadow-emerald-950/15 backdrop-blur"
+    className="no-print fixed bottom-4 left-1/2 z-40 w-[calc(100%-2rem)] max-w-md -translate-x-1/2 rounded-full border border-white bg-white p-1.5 shadow-xl shadow-emerald-950/15"
   >
     <ul className="flex items-center justify-between gap-1">
       {TABS.map(({ id, label, icon: Icon }) => {
@@ -83,8 +85,8 @@ export const BottomNav: React.FC<BottomNavProps> = ({ active, onChange }) => (
               onClick={() => onChange(id)}
               aria-label={label}
               aria-current={isActive ? 'page' : undefined}
-              className={`flex h-12 w-full items-center justify-center gap-2 rounded-full text-sm font-semibold transition ${
-                isActive ? 'bg-emerald-950 text-white shadow-md' : 'text-emerald-950/70 hover:bg-emerald-50'
+              className={`press flex h-12 w-full items-center justify-center gap-1.5 rounded-full text-[13px] font-semibold transition-colors ${
+                isActive ? 'bg-emerald-950 text-white shadow-md' : 'text-emerald-950/70 active:bg-emerald-50'
               }`}
             >
               <Icon className="h-5 w-5 shrink-0" />
@@ -95,4 +97,5 @@ export const BottomNav: React.FC<BottomNavProps> = ({ active, onChange }) => (
       })}
     </ul>
   </nav>
-);
+));
+BottomNav.displayName = 'BottomNav';

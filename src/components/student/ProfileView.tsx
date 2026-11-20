@@ -66,7 +66,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ student, rebates, onAp
           <button
             type="button"
             onClick={onApplyRebate}
-            className="flex shrink-0 items-center gap-1.5 rounded-full bg-amber-400 px-4 py-2 text-xs font-bold text-emerald-950 shadow-sm transition hover:bg-amber-500"
+            className="press flex shrink-0 items-center gap-1.5 rounded-full bg-amber-400 px-4 py-2 text-xs font-bold text-emerald-950 shadow-sm"
           >
             <Send className="h-3.5 w-3.5" />
             Apply
@@ -98,7 +98,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ student, rebates, onAp
         <button
           type="button"
           onClick={onLogout}
-          className="flex w-full items-center justify-center gap-2 rounded-full border border-rose-200 bg-white py-3 text-sm font-bold text-rose-700 shadow-sm transition hover:bg-rose-50"
+          className="press flex w-full items-center justify-center gap-2 rounded-full border border-rose-200 bg-white py-3 text-sm font-bold text-rose-700 shadow-sm"
         >
           <LogOut className="h-4 w-4" />
           Log out

@@ -8,6 +8,11 @@
   --background-end-rgb: 241, 245, 249;
 }
 
+html {
+  -webkit-tap-highlight-color: transparent;
+  -webkit-text-size-adjust: 100%;
+}
+
 body {
   color: rgb(var(--foreground-rgb));
   background: linear-gradient(
@@ -17,6 +22,80 @@ body {
     );
   min-height: 100vh;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+}
+
+/* Removes the 300ms tap delay and double-tap zoom on interactive elements (feels instant on phones) */
+button,
+a,
+select,
+input,
+textarea,
+label,
+[role='button'] {
+  touch-action: manipulation;
+}
+
+/* Only transform/opacity are animated, so the browser can run these on the GPU. */
+@keyframes tab-in {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 10px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes sheet-in {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 24px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+.tab-enter {
+  animation: tab-in 0.22s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.fade-enter {
+  animation: fade-in 0.18s ease-out both;
+}
+
+.sheet-enter {
+  animation: sheet-in 0.26s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* Tap feedback without layout work */
+.press {
+  transition: transform 0.12s ease-out;
+}
+.press:active {
+  transform: scale(0.97);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tab-enter,
+  .fade-enter,
+  .sheet-enter {
+    animation: none;
+  }
+  .press {
+    transition: none;
+  }
 }
 
 @media print {

@@ -1,4 +1,4 @@
-import { Student, DiningDailyRecord, MonthlyBill, RebateRequest, MessSettings, FoodReview } from '@/types';
+import { Student, DiningDailyRecord, MonthlyBill, PaymentSlip, RebateRequest, MessSettings, FoodReview } from '@/types';
 
 export const INITIAL_SETTINGS: MessSettings = {
   session: '2026-2027',
@@ -118,23 +118,27 @@ export const INITIAL_STUDENTS: Student[] = [
   }
 ];
 
-// Generate day-wise attendance for November 2026 (days 1 to 20)
+const pad2 = (n: number) => String(n).padStart(2, '0');
+
+// Day-wise attendance for the current session: 1 July 2026 to 20 November 2026.
 export function generateInitialDailyRecords(students: Student[]): DiningDailyRecord[] {
   const records: DiningDailyRecord[] = [];
-  const year = 2026;
-  const month = 11; // November
+  const end = new Date(2026, 10, 20);
 
-  for (let day = 1; day <= 20; day++) {
-    const dayStr = day < 10 ? `0${day}` : `${day}`;
-    const dateStr = `${year}-${month}-${dayStr}`;
+  for (let d = new Date(2026, 6, 1); d <= end; d.setDate(d.getDate() + 1)) {
+    const year = d.getFullYear();
+    const month = d.getMonth() + 1;
+    const day = d.getDate();
+    const dateStr = `${year}-${pad2(month)}-${pad2(day)}`;
 
     students.forEach((student, index) => {
-      // Simulate realistic pattern: some students have rebates, some missed a dinner
-      const isRebate = (student.enrollment_no === 'GL3412' && day >= 10 && day <= 13) ||
-                       (student.enrollment_no === 'GM5501' && day >= 5 && day <= 8);
+      // Simulate realistic pattern: some students have rebates, some missed a day
+      const isRebate =
+        (student.enrollment_no === 'GL3412' && month === 11 && day >= 10 && day <= 13) ||
+        (student.enrollment_no === 'GM5501' && month === 11 && day >= 5 && day <= 8);
 
-      const isEaten = isRebate ? false : !((day + index) % 11 === 0);
-      const guestDiets = (day === 15 && index === 0) ? 2 : 0;
+      const isEaten = isRebate ? false : !((day + month + index) % 11 === 0);
+      const guestDiets = day === 15 && index === 0 ? 2 : 0;
 
       records.push({
         id: `rec-${student.id}-${dateStr}`,
@@ -155,48 +159,66 @@ export function generateInitialDailyRecords(students: Student[]): DiningDailyRec
   return records;
 }
 
-export function generateInitialBills(students: Student[]): MonthlyBill[] {
-  const bills: MonthlyBill[] = [];
+const MONTH_NAMES = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December'
+];
 
-  const months = [
-    // Current Academic Session 2026-2027
-    { name: 'July 2026', key: '2026-07', session: '2026-2027', days: 31, paid: true },
-    { name: 'August 2026', key: '2026-08', session: '2026-2027', days: 31, paid: true },
-    { name: 'September 2026', key: '2026-09', session: '2026-2027', days: 30, paid: true },
-    { name: 'October 2026', key: '2026-10', session: '2026-2027', days: 31, paid: true },
-    { name: 'November 2026', key: '2026-11', session: '2026-2027', days: 20, paid: false },
-    // Previous Academic Session 2025-2026
-    { name: 'July 2025', key: '2025-07', session: '2025-2026', days: 31, paid: true },
-    { name: 'August 2025', key: '2025-08', session: '2025-2026', days: 31, paid: true },
-    { name: 'September 2025', key: '2025-09', session: '2025-2026', days: 30, paid: true },
-    { name: 'October 2025', key: '2025-10', session: '2025-2026', days: 31, paid: true },
-    { name: 'November 2025', key: '2025-11', session: '2025-2026', days: 30, paid: true },
-    { name: 'December 2025', key: '2025-12', session: '2025-2026', days: 31, paid: true },
-    { name: 'January 2026', key: '2026-01', session: '2025-2026', days: 31, paid: true },
-    { name: 'February 2026', key: '2026-02', session: '2025-2026', days: 28, paid: true },
-    { name: 'March 2026', key: '2026-03', session: '2025-2026', days: 31, paid: true },
-    { name: 'April 2026', key: '2026-04', session: '2025-2026', days: 30, paid: true },
-    { name: 'May 2026', key: '2026-05', session: '2025-2026', days: 31, paid: true },
-    { name: 'June 2026', key: '2026-06', session: '2025-2026', days: 30, paid: true },
-    // Past Academic Session 2024-2025
-    { name: 'July 2024', key: '2024-07', session: '2024-2025', days: 31, paid: true },
-    { name: 'August 2024', key: '2024-08', session: '2024-2025', days: 31, paid: true },
-    { name: 'September 2024', key: '2024-09', session: '2024-2025', days: 30, paid: true },
-    { name: 'October 2024', key: '2024-10', session: '2024-2025', days: 31, paid: true },
-    { name: 'November 2024', key: '2024-11', session: '2024-2025', days: 30, paid: true }
-  ];
+/**
+ * Monthly bills and the deposit slips that paid for them, generated together so the
+ * numbers agree. Bills for 2026-27 are computed from the day-wise records above.
+ * Students deposit round amounts, so a small deficit (or advance) carries forward.
+ */
+export function generateInitialLedger(students: Student[]): { bills: MonthlyBill[]; slips: PaymentSlip[] } {
+  const records = generateInitialDailyRecords(students);
+  const monthStats = new Map<string, { eaten: number; guests: number; rebate: number }>();
+  records.forEach((r) => {
+    const key = `${r.student_id}_${r.date.slice(0, 7)}`;
+    const s = monthStats.get(key) ?? { eaten: 0, guests: 0, rebate: 0 };
+    if (r.is_rebate) s.rebate += 1;
+    else if (r.eaten) s.eaten += 1;
+    s.guests += r.guest_diets || 0;
+    monthStats.set(key, s);
+  });
+
+  // Every month from July 2024 to November 2026, oldest first.
+  const months: Array<{ name: string; key: string; session: string; days: number }> = [];
+  let y = 2024;
+  let m = 7;
+  while (y < 2026 || (y === 2026 && m <= 11)) {
+    months.push({
+      name: `${MONTH_NAMES[m - 1]} ${y}`,
+      key: `${y}-${pad2(m)}`,
+      session: m >= 7 ? `${y}-${y + 1}` : `${y - 1}-${y}`,
+      days: new Date(y, m, 0).getDate()
+    });
+    m += 1;
+    if (m > 12) {
+      m = 1;
+      y += 1;
+    }
+  }
+
+  const dietRate = INITIAL_SETTINGS.diet_rate;
+  const fixedCharges = INITIAL_SETTINGS.fixed_charges;
+  const establishmentCharges = INITIAL_SETTINGS.establishment_charges;
+  const bills: MonthlyBill[] = [];
+  const slips: PaymentSlip[] = [];
+  let slipCounter = 0;
 
   students.forEach((student, sIdx) => {
+    let balance = 0; // charged minus paid so far
+
     months.forEach((m) => {
-      const rebateDays = (sIdx % 2 === 0) ? 4 : 0;
-      const totalDiets = Math.max(10, (m.days * 2) - (rebateDays * 2) - ((sIdx + 3) % 4));
-      const dietRate = 65;
+      const stats = monthStats.get(`${student.id}_${m.key}`);
+      const rebateDays = stats ? stats.rebate : sIdx % 2 === 0 ? 4 : 0;
+      const totalDiets = stats
+        ? stats.eaten + stats.guests
+        : Math.max(10, m.days - rebateDays - ((sIdx + 3) % 4));
       const dietAmount = totalDiets * dietRate;
-      const fixedCharges = 500;
-      const establishmentCharges = 350;
       const totalAmount = dietAmount + fixedCharges + establishmentCharges;
 
-      bills.push({
+      const bill: MonthlyBill = {
         id: `bill-${student.id}-${m.key}`,
         student_id: student.id,
         enrollment_no: student.enrollment_no,
@@ -211,14 +233,54 @@ export function generateInitialBills(students: Student[]): MonthlyBill[] {
         establishment_charges: establishmentCharges,
         extras: 0,
         total_amount: totalAmount,
-        status: m.paid ? 'paid' : (m.key === '2026-11' ? 'pending' : 'overdue'),
-        payment_date: m.paid ? `2026-${m.key.split('-')[1]}-28` : undefined,
-        receipt_no: m.paid ? `RCP-AMU-${m.key.replace('-', '')}-${student.enrollment_no}` : undefined
-      });
+        status: 'pending'
+      };
+
+      balance += totalAmount;
+
+      // The running month (November 2026) is not settled yet.
+      if (m.key < '2026-11') {
+        const pay = sIdx % 3 === 0 ? Math.floor(balance / 500) * 500 : Math.ceil(balance / 100) * 100;
+        if (pay > 0) {
+          slipCounter += 1;
+          let breakup: number[] | undefined;
+          if (sIdx % 2 === 0 && pay >= 2000) {
+            const first = Math.round((pay * 0.55) / 100) * 100;
+            if (first > 0 && first < pay) breakup = [first, pay - first];
+          }
+          const paidOn = `${m.key}-${pad2(Math.min(28, m.days))}`;
+          const slip: PaymentSlip = {
+            id: `slip-${student.id}-${m.key}`,
+            student_id: student.id,
+            enrollment_no: student.enrollment_no,
+            book_no: String(100 + Math.floor(slipCounter / 50)),
+            slip_no: String(15000 + slipCounter),
+            amount: pay,
+            breakup,
+            paid_on: paidOn,
+            cashier: 'Ashfaq Ahmad'
+          };
+          slips.push(slip);
+          bill.payment_date = paidOn;
+          bill.receipt_no = slip.slip_no;
+          balance -= pay;
+        }
+        bill.status = balance > 0 && m.key === '2026-10' ? 'overdue' : 'paid';
+      }
+
+      bills.push(bill);
     });
   });
 
-  return bills;
+  return { bills, slips };
+}
+
+export function generateInitialBills(students: Student[]): MonthlyBill[] {
+  return generateInitialLedger(students).bills;
+}
+
+export function generateInitialPayments(students: Student[]): PaymentSlip[] {
+  return generateInitialLedger(students).slips;
 }
 
 export const INITIAL_REBATES: RebateRequest[] = [

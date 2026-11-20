@@ -190,3 +190,47 @@ export function computeMonthStats(records: DiningDailyRecord[], monthKey: string
     rebateDays: inMonth.filter((r) => r.is_rebate).length
   };
 }
+
+/* ------------------------------------------------------------------ */
+/* Session helpers                                                     */
+/* ------------------------------------------------------------------ */
+
+/** "2026-2027" -> ["2026-07", ... "2027-06"] (an academic session runs July to June). */
+export function sessionMonths(session: string): string[] {
+  const startYear = Number(session.split('-')[0]);
+  return Array.from({ length: 12 }, (_, i) => {
+    const m = ((6 + i) % 12) + 1;
+    const y = m >= 7 ? startYear : startYear + 1;
+    return `${y}-${pad(m)}`;
+  });
+}
+
+export interface MonthAttendance {
+  present: number;
+  absent: number;
+  rebate: number;
+  guests: number;
+  recorded: number;
+}
+
+/** One pass over all records, grouped by "YYYY-MM". */
+export function groupAttendanceByMonth(records: DiningDailyRecord[]): Map<string, MonthAttendance> {
+  const map = new Map<string, MonthAttendance>();
+  records.forEach((r) => {
+    const key = r.date.slice(0, 7);
+    const m = map.get(key) ?? { present: 0, absent: 0, rebate: 0, guests: 0, recorded: 0 };
+    if (r.is_rebate) m.rebate += 1;
+    else if (isEaten(r)) m.present += 1;
+    else m.absent += 1;
+    m.guests += r.guest_diets || 0;
+    m.recorded += 1;
+    map.set(key, m);
+  });
+  return map;
+}
+/** "2026-11-20" -> "2026-2027" (sessions start in July). */
+export function sessionOfDate(dateKey: string): string {
+  const [y, m] = dateKey.split('-').map(Number);
+  const start = m >= 7 ? y : y - 1;
+  return `${start}-${start + 1}`;
+}

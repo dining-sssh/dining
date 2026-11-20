@@ -110,6 +110,19 @@ export interface MonthlyBill {
   receipt_no?: string;
 }
 
+/** A "Food Charges Slip": one deposit made by a student at the dining office. */
+export interface PaymentSlip {
+  id: string;
+  student_id: string;
+  enrollment_no: string;
+  book_no: string;
+  slip_no: string; // printed as "R. No." on the slip
+  amount: number;
+  breakup?: number[]; // e.g. [1600, 1400] is written as "1600 + 1400 = 3000/-"
+  paid_on: string; // YYYY-MM-DD
+  cashier?: string;
+}
+
 export interface RebateRequest {
   id: string;
   student_id: string;

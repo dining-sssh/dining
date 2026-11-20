@@ -51,12 +51,12 @@ export const RebateModal: React.FC<RebateModalProps> = ({ open, onClose, onSubmi
 
   return (
     <div
-      className="no-print fixed inset-0 z-50 flex items-end justify-center bg-emerald-950/50 p-0 backdrop-blur-sm sm:items-center sm:p-4"
+      className="no-print fade-enter fixed inset-0 z-50 flex items-end justify-center bg-emerald-950/60 p-0 sm:items-center sm:p-4"
       role="dialog"
       aria-modal="true"
       aria-labelledby="rebate-title"
     >
-      <div className="w-full max-w-md overflow-hidden rounded-t-3xl bg-white shadow-2xl sm:rounded-3xl">
+      <div className="sheet-enter max-h-[94dvh] w-full max-w-md overflow-y-auto rounded-t-3xl bg-white shadow-2xl sm:rounded-3xl">
         <div className="flex items-start justify-between bg-gradient-to-br from-[#0c5a41] to-[#052e20] px-5 py-4 text-white">
           <div>
             <h3 id="rebate-title" className="text-base font-bold">
@@ -68,7 +68,7 @@ export const RebateModal: React.FC<RebateModalProps> = ({ open, onClose, onSubmi
             type="button"
             onClick={onClose}
             aria-label="Close"
-            className="rounded-full p-1.5 text-emerald-100 transition hover:bg-white/10 hover:text-white"
+            className="press rounded-full p-2 text-emerald-100 active:bg-white/10"
           >
             <X className="h-5 w-5" />
           </button>
@@ -94,7 +94,7 @@ export const RebateModal: React.FC<RebateModalProps> = ({ open, onClose, onSubmi
                   required
                   value={start}
                   onChange={(e) => setStart(e.target.value)}
-                  className="w-full rounded-xl border border-slate-300 px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-600"
+                  className="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-base focus:outline-none focus:ring-2 focus:ring-emerald-600 sm:text-xs"
                 />
               </label>
               <label className="block">
@@ -105,7 +105,7 @@ export const RebateModal: React.FC<RebateModalProps> = ({ open, onClose, onSubmi
                   min={start || undefined}
                   value={end}
                   onChange={(e) => setEnd(e.target.value)}
-                  className="w-full rounded-xl border border-slate-300 px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-600"
+                  className="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-base focus:outline-none focus:ring-2 focus:ring-emerald-600 sm:text-xs"
                 />
               </label>
             </div>
@@ -119,7 +119,7 @@ export const RebateModal: React.FC<RebateModalProps> = ({ open, onClose, onSubmi
                 placeholder="e.g. Family function, medical leave, home visit"
                 value={reason}
                 onChange={(e) => setReason(e.target.value)}
-                className="w-full rounded-xl border border-slate-300 px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-600"
+                className="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-base focus:outline-none focus:ring-2 focus:ring-emerald-600 sm:text-xs"
               />
             </label>
 
@@ -127,14 +127,14 @@ export const RebateModal: React.FC<RebateModalProps> = ({ open, onClose, onSubmi
               <button
                 type="button"
                 onClick={onClose}
-                className="rounded-full px-4 py-2.5 font-semibold text-slate-600 transition hover:bg-slate-100"
+                className="press rounded-full px-4 py-2.5 font-semibold text-slate-600 active:bg-slate-100"
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={submitting || Boolean(dateError)}
-                className="rounded-full bg-emerald-900 px-5 py-2.5 font-bold text-white shadow transition hover:bg-emerald-950 disabled:opacity-60"
+                className="press rounded-full bg-emerald-900 px-5 py-2.5 font-bold text-white shadow disabled:opacity-60"
               >
                 {submitting ? 'Submitting…' : 'Submit request'}
               </button>

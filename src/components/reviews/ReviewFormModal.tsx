@@ -1,9 +1,10 @@
 'use client';
 
-import React, { useState } from 'react';
-import { X, Sparkles, CheckCircle2, MessageSquare, Utensils, Building2, Calendar } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { X, CheckCircle2, MessageSquare, Utensils, Building2, Calendar } from 'lucide-react';
 import { RatingScale, HostelHouseCode, HOSTEL_HOUSES, FoodReview, Student } from '@/types';
 import { DataService } from '@/lib/dataService';
+import { toDateKey } from '../student/studentUtils';
 
 interface ReviewFormModalProps {
   open: boolean;
@@ -12,42 +13,51 @@ interface ReviewFormModalProps {
   activeStudent?: Student | null;
 }
 
-interface ParameterRow {
-  key: 'quality' | 'quantity' | 'taste' | 'cleanliness';
-  title: string;
-  subtitle: string;
-}
+type CriterionKey = 'quality' | 'quantity' | 'taste' | 'cleanliness';
 
-const PARAMETERS: ParameterRow[] = [
+const CRITERIA: Array<{ key: CriterionKey; title: string; subtitle: string }> = [
   {
     key: 'quality',
-    title: 'The overall quality of the food',
-    subtitle: 'Freshness of ingredients, oil quality, and hygienic preparation'
+    title: 'Quality of the food',
+    subtitle: 'Freshness of ingredients, oil quality, hygienic preparation'
   },
   {
     key: 'quantity',
-    title: 'The quantity & portion size',
-    subtitle: 'Adequacy of servings, roti replenishment, and rice portions'
+    title: 'Quantity & portion size',
+    subtitle: 'Adequate servings, roti and rice portions'
   },
   {
     key: 'taste',
-    title: 'The taste & flavor of dishes',
-    subtitle: 'Seasoning, authenticity, salt balance, and meal satisfaction'
+    title: 'Taste & flavour',
+    subtitle: 'Seasoning, salt balance, overall satisfaction'
   },
   {
     key: 'cleanliness',
-    title: 'The cleanliness & hygiene (House-wise)',
-    subtitle: 'Dining table sanitization, plate hygiene & dining area cleanliness'
+    title: 'Cleanliness & hygiene (house-wise)',
+    subtitle: 'Tables, plates and dining area cleanliness'
   }
 ];
 
-const RATING_COLUMNS: Array<{ rating: RatingScale; label: string }> = [
-  { rating: 1, label: 'Very Poor' },
+const RATINGS: Array<{ rating: RatingScale; label: string }> = [
+  { rating: 1, label: 'Very poor' },
   { rating: 2, label: 'Poor' },
   { rating: 3, label: 'Neutral' },
   { rating: 4, label: 'Good' },
   { rating: 5, label: 'Excellent' }
 ];
+
+const MEALS: Array<{ id: 'lunch' | 'dinner' | 'all_day'; label: string }> = [
+  { id: 'lunch', label: 'Lunch' },
+  { id: 'dinner', label: 'Dinner' },
+  { id: 'all_day', label: 'Whole day' }
+];
+
+const sentimentFor = (score: number) => {
+  if (score >= 4.5) return { text: 'Exceptional', color: 'text-emerald-700 bg-emerald-100' };
+  if (score >= 3.8) return { text: 'Good', color: 'text-teal-700 bg-teal-100' };
+  if (score >= 2.8) return { text: 'Average', color: 'text-amber-700 bg-amber-100' };
+  return { text: 'Needs attention', color: 'text-rose-700 bg-rose-100' };
+};
 
 export const ReviewFormModal: React.FC<ReviewFormModalProps> = ({
   open,
@@ -55,61 +65,67 @@ export const ReviewFormModal: React.FC<ReviewFormModalProps> = ({
   onReviewSubmitted,
   activeStudent
 }) => {
-  const todayStr = new Date().toISOString().split('T')[0];
-  const formattedToday = new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
-
-  const date = todayStr;
   const [mealType, setMealType] = useState<'lunch' | 'dinner' | 'all_day'>('lunch');
-  const [quality, setQuality] = useState<RatingScale>(4);
-  const [quantity, setQuantity] = useState<RatingScale>(4);
-  const [taste, setTaste] = useState<RatingScale>(4);
-  const [cleanliness, setCleanliness] = useState<RatingScale>(4);
+  const [ratings, setRatings] = useState<Record<CriterionKey, RatingScale>>({
+    quality: 4,
+    quantity: 4,
+    taste: 4,
+    cleanliness: 4
+  });
   const [selectedHouse, setSelectedHouse] = useState<HostelHouseCode>(activeStudent?.house || 'HM');
   const [comments, setComments] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submittedSuccess, setSubmittedSuccess] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Fresh form each time it opens.
+  useEffect(() => {
+    if (open) {
+      setMealType('lunch');
+      setRatings({ quality: 4, quantity: 4, taste: 4, cleanliness: 4 });
+      setSelectedHouse(activeStudent?.house || 'HM');
+      setComments('');
+      setIsSubmitting(false);
+      setSubmittedSuccess(false);
+    }
+    return () => {
+      if (timer.current) clearTimeout(timer.current);
+    };
+  }, [open, activeStudent?.house]);
 
   if (!open) return null;
 
-  // Real-time overall score
-  const computedOverall = Number(((quality + quantity + taste + cleanliness) / 4).toFixed(1));
+  const now = new Date();
+  const dateKey = toDateKey(now);
+  const formattedToday = now.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
 
-  const getSentimentText = (score: number) => {
-    if (score >= 4.5) return { text: 'Exceptional (5/5)', color: 'text-emerald-700 bg-emerald-100 border-emerald-300' };
-    if (score >= 3.8) return { text: 'Good (4/5)', color: 'text-teal-700 bg-teal-100 border-teal-300' };
-    if (score >= 2.8) return { text: 'Average / Neutral (3/5)', color: 'text-amber-700 bg-amber-100 border-amber-300' };
-    return { text: 'Needs Urgent Attention', color: 'text-rose-700 bg-rose-100 border-rose-300' };
-  };
-
-  const sentiment = getSentimentText(computedOverall);
+  const computedOverall = Number(
+    ((ratings.quality + ratings.quantity + ratings.taste + ratings.cleanliness) / 4).toFixed(1)
+  );
+  const sentiment = sentimentFor(computedOverall);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmitting) return;
     setIsSubmitting(true);
 
     try {
-      const studentId = activeStudent?.id || 's-1';
-      const studentName = activeStudent?.name || 'Anonymous Student';
-      const enrollmentNo = activeStudent?.enrollment_no || 'AMU-RESIDENT';
-
       const created = await DataService.addFoodReview({
-        student_id: studentId,
-        student_name: studentName,
-        enrollment_no: enrollmentNo,
-        date,
+        student_id: activeStudent?.id || 's-1',
+        student_name: activeStudent?.name || 'Anonymous Student',
+        enrollment_no: activeStudent?.enrollment_no || 'AMU-RESIDENT',
+        date: dateKey,
         meal_type: mealType,
-        quality_rating: quality,
-        quantity_rating: quantity,
-        taste_rating: taste,
-        cleanliness_rating: cleanliness,
+        quality_rating: ratings.quality,
+        quantity_rating: ratings.quantity,
+        taste_rating: ratings.taste,
+        cleanliness_rating: ratings.cleanliness,
         cleanliness_house: selectedHouse,
         comments: comments.trim() ? comments.trim() : undefined
       });
 
       setSubmittedSuccess(true);
-      setTimeout(() => {
-        setIsSubmitting(false);
-        setSubmittedSuccess(false);
+      timer.current = setTimeout(() => {
         onReviewSubmitted(created);
         onClose();
       }, 900);
@@ -120,255 +136,185 @@ export const ReviewFormModal: React.FC<ReviewFormModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm overflow-y-auto animate-in fade-in duration-200">
-      <div className="relative w-full max-w-3xl my-8 bg-white rounded-3xl shadow-2xl border-2 border-emerald-800/15 overflow-hidden">
-        {/* Header styling inspired by AMU Sir Syed Hall colors */}
-        <div className="bg-gradient-to-r from-emerald-950 via-emerald-900 to-teal-950 p-6 text-white relative">
+    <div
+      className="no-print fade-enter fixed inset-0 z-50 flex items-end justify-center bg-slate-900/60 sm:items-center sm:p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="review-title"
+    >
+      <div className="sheet-enter flex max-h-[94dvh] w-full flex-col overflow-hidden rounded-t-3xl bg-white shadow-2xl sm:max-w-2xl sm:rounded-3xl">
+        {/* Header */}
+        <div className="relative shrink-0 bg-gradient-to-r from-emerald-950 via-emerald-900 to-teal-950 px-4 py-4 text-white sm:px-6 sm:py-5">
           <button
             type="button"
             onClick={onClose}
-            className="absolute top-5 right-5 p-2 rounded-full text-emerald-200 hover:text-white hover:bg-white/10 transition"
+            aria-label="Close"
+            className="press absolute right-3 top-3 rounded-full p-2 text-emerald-200 active:bg-white/10"
           >
-            <X className="w-5 h-5" />
+            <X className="h-5 w-5" />
           </button>
-          <div className="flex items-center gap-2 mb-1">
-            <span className="p-1.5 rounded-lg bg-amber-400 text-emerald-950">
-              <Utensils className="w-4 h-4" />
+          <div className="mb-1 flex items-center gap-2">
+            <span className="rounded-lg bg-amber-400 p-1.5 text-emerald-950">
+              <Utensils className="h-4 w-4" />
             </span>
-            <span className="text-xs uppercase font-extrabold tracking-wider text-amber-300">
-              Daily Dining Feedback
-            </span>
+            <span className="text-[11px] font-extrabold uppercase tracking-wider text-amber-300">Daily dining feedback</span>
           </div>
-          <h2 className="text-2xl font-black text-white">Daily Meal & Cleanliness Review</h2>
-          <p className="text-xs text-emerald-100/90 mt-1">
-            Your review is monitored live on a daily basis by the Provost, Senior Munshi, and fellow students.
-          </p>
+          <h2 id="review-title" className="pr-10 text-lg font-black sm:text-2xl">
+            Meal & Cleanliness Review
+          </h2>
         </div>
 
         {submittedSuccess ? (
-          <div className="p-12 text-center space-y-4">
-            <div className="w-16 h-16 mx-auto rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center animate-bounce">
-              <CheckCircle2 className="w-10 h-10" />
+          <div className="space-y-3 p-10 text-center">
+            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100 text-emerald-600">
+              <CheckCircle2 className="h-10 w-10" />
             </div>
-            <h3 className="text-xl font-bold text-slate-900">Review Submitted Successfully!</h3>
-            <p className="text-sm text-slate-600 max-w-md mx-auto">
-              Thank you for rating today’s food and cleanliness. Your ratings have updated the hall’s daily aggregate score and house cleanliness ranking.
+            <h3 className="text-lg font-bold text-slate-900">Review submitted</h3>
+            <p className="mx-auto max-w-sm text-sm text-slate-600">
+              Thank you. Your ratings now count in the hall&apos;s daily score and the house cleanliness ranking.
             </p>
           </div>
         ) : (
-          <form onSubmit={handleSubmit} className="p-6 sm:p-8 space-y-6">
-            {/* Top metadata strip: Current Date, Meal Type, and Student Tag */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-xs">
-              <div>
-                <label className="block font-semibold text-slate-500 mb-1">Date (Current Date)</label>
-                <div className="flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-200 bg-white font-bold text-slate-800 shadow-xs">
-                  <Calendar className="w-4 h-4 text-emerald-700 shrink-0" />
-                  <span>Today ({formattedToday})</span>
-                </div>
-              </div>
-
-              <div>
-                <label className="block font-semibold text-slate-500 mb-1">Meal Served</label>
-                <select
-                  value={mealType}
-                  onChange={(e) => setMealType(e.target.value as 'lunch' | 'dinner' | 'all_day')}
-                  className="w-full px-2.5 py-1.5 rounded-xl border border-slate-300 bg-white font-semibold text-slate-800 focus:ring-2 focus:ring-emerald-600 outline-none"
-                >
-                  <option value="lunch">Lunch</option>
-                  <option value="dinner">Dinner</option>
-                  <option value="all_day">Whole Day</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block font-semibold text-slate-500 mb-1">Reviewer</label>
-                <div className="px-2.5 py-1.5 rounded-xl border border-slate-200 bg-white font-semibold text-slate-700 truncate">
-                  {activeStudent ? `${activeStudent.name} (${activeStudent.house})` : 'Student Resident'}
-                </div>
-              </div>
-            </div>
-
-            {/* Matrix Card styled exactly like the user's uploaded reference image */}
-            <div className="rounded-2xl border-2 border-dashed border-slate-300 bg-white p-5 sm:p-6 shadow-sm">
-              <div className="text-center mb-6">
-                <h3 className="text-base sm:text-lg font-bold text-slate-800">
-                  Please rate our dining hall based on your recent dining experience:
-                </h3>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Select your rating from Very Poor to Excellent for each criterion
-                </p>
-              </div>
-
-              {/* Responsive Matrix */}
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[540px] border-collapse">
-                  <thead>
-                    <tr className="border-b border-slate-200">
-                      <th className="text-left pb-3 text-xs font-bold text-slate-600 uppercase tracking-wider w-2/5">
-                        Criteria
-                      </th>
-                      {RATING_COLUMNS.map((col) => (
-                        <th
-                          key={col.rating}
-                          className="text-center pb-3 text-xs font-semibold text-slate-600 px-2"
-                        >
-                          {col.label}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {PARAMETERS.map((param) => {
-                      const currentVal =
-                        param.key === 'quality'
-                          ? quality
-                          : param.key === 'quantity'
-                          ? quantity
-                          : param.key === 'taste'
-                          ? taste
-                          : cleanliness;
-
-                      const setter =
-                        param.key === 'quality'
-                          ? setQuality
-                          : param.key === 'quantity'
-                          ? setQuantity
-                          : param.key === 'taste'
-                          ? setTaste
-                          : setCleanliness;
-
-                      return (
-                        <React.Fragment key={param.key}>
-                          <tr className="hover:bg-slate-50/80 transition group">
-                            <td className="py-4 pr-3 align-middle">
-                              <p className="text-xs sm:text-sm font-bold text-slate-800 leading-snug">
-                                {param.title}
-                              </p>
-                              <p className="text-[11px] text-slate-400 mt-0.5 leading-tight">
-                                {param.subtitle}
-                              </p>
-                            </td>
-
-                            {RATING_COLUMNS.map((col) => {
-                              const isChecked = currentVal === col.rating;
-                              return (
-                                <td
-                                  key={col.rating}
-                                  className="py-4 px-2 text-center align-middle cursor-pointer"
-                                  onClick={() => setter(col.rating)}
-                                >
-                                  <div className="flex flex-col items-center justify-center">
-                                    <div
-                                      className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full border-2 flex items-center justify-center transition-all ${
-                                        isChecked
-                                          ? 'border-emerald-700 bg-emerald-700 text-white shadow-md scale-105'
-                                          : 'border-slate-300 bg-white hover:border-slate-400 group-hover:bg-white'
-                                      }`}
-                                    >
-                                      {isChecked ? (
-                                        <div className="w-2.5 h-2.5 rounded-full bg-white" />
-                                      ) : null}
-                                    </div>
-                                    <span className="text-[10px] text-slate-400 mt-1 font-medium sm:hidden">
-                                      {col.rating}
-                                    </span>
-                                  </div>
-                                </td>
-                              );
-                            })}
-                          </tr>
-
-                          {/* Specific requirement: FOR CLEANLINESS ADD OPTION TO SELECT HOSTEL (HM, QH, etc.) */}
-                          {param.key === 'cleanliness' && (
-                            <tr className="bg-emerald-50/60 border-t border-b border-emerald-200">
-                              <td colSpan={6} className="p-3.5">
-                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-                                  <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-950">
-                                    <Building2 className="w-4 h-4 text-emerald-800" />
-                                    <span>Select Hostel / House for Cleanliness Rating:</span>
-                                    <span className="text-[11px] text-emerald-700 font-normal">
-                                      (Defines house-wise hygiene report)
-                                    </span>
-                                  </div>
-                                  <div className="flex flex-wrap gap-1.5">
-                                    {(Object.keys(HOSTEL_HOUSES) as HostelHouseCode[]).map((code) => {
-                                      const isHouseSelected = selectedHouse === code;
-                                      const hInfo = HOSTEL_HOUSES[code];
-                                      return (
-                                        <button
-                                          key={code}
-                                          type="button"
-                                          onClick={() => setSelectedHouse(code)}
-                                          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition border ${
-                                            isHouseSelected
-                                              ? 'bg-emerald-800 text-white border-emerald-900 shadow-sm ring-2 ring-emerald-600/30'
-                                              : 'bg-white text-slate-700 border-slate-200 hover:border-emerald-400'
-                                          }`}
-                                          title={hInfo.name}
-                                        >
-                                          {code} - {hInfo.shortName}
-                                        </button>
-                                      );
-                                    })}
-                                  </div>
-                                </div>
-                              </td>
-                            </tr>
-                          )}
-                        </React.Fragment>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-
-              {/* Dynamic Overall Score Banner */}
-              <div className="mt-5 pt-4 border-t border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold text-slate-600">Calculated Overall Score:</span>
-                  <span className="text-xl font-black text-slate-900">{computedOverall} / 5.0</span>
-                  <span className={`text-xs font-bold px-2.5 py-0.5 rounded-full border ${sentiment.color}`}>
-                    {sentiment.text}
+          <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
+            <div className="flex-1 space-y-5 overflow-y-auto p-4 sm:p-6">
+              {/* Date + meal */}
+              <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-3 text-xs">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="flex items-center gap-1.5 font-bold text-slate-800">
+                    <Calendar className="h-4 w-4 text-emerald-700" />
+                    Today ({formattedToday})
+                  </span>
+                  <span className="truncate font-semibold text-slate-600">
+                    {activeStudent ? `${activeStudent.name} (${activeStudent.house})` : 'Student resident'}
                   </span>
                 </div>
-                <div className="text-xs text-slate-500 flex items-center gap-1">
-                  <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-                  <span>Equal weight (25% each): Quality, Quantity, Taste, Cleanliness</span>
+                <div className="grid grid-cols-3 gap-1 rounded-full bg-slate-200/70 p-1 font-bold">
+                  {MEALS.map((m) => (
+                    <button
+                      key={m.id}
+                      type="button"
+                      onClick={() => setMealType(m.id)}
+                      aria-pressed={mealType === m.id}
+                      className={`press rounded-full py-2 transition-colors ${
+                        mealType === m.id ? 'bg-white text-emerald-950 shadow' : 'text-slate-600'
+                      }`}
+                    >
+                      {m.label}
+                    </button>
+                  ))}
                 </div>
+              </div>
+
+              {/* Criteria */}
+              {CRITERIA.map((c) => (
+                <fieldset key={c.key}>
+                  <legend className="text-sm font-bold leading-snug text-slate-800">{c.title}</legend>
+                  <p className="mb-2 text-[11px] leading-tight text-slate-400">{c.subtitle}</p>
+
+                  <div className="grid grid-cols-5 gap-1.5 sm:gap-2">
+                    {RATINGS.map((r) => {
+                      const selected = ratings[c.key] === r.rating;
+                      return (
+                        <button
+                          key={r.rating}
+                          type="button"
+                          onClick={() => setRatings((prev) => ({ ...prev, [c.key]: r.rating }))}
+                          aria-pressed={selected}
+                          aria-label={`${c.title}: ${r.label}`}
+                          className={`press flex flex-col items-center justify-center rounded-xl border-2 px-0.5 py-2 transition-colors ${
+                            selected
+                              ? 'border-emerald-700 bg-emerald-700 text-white shadow'
+                              : 'border-slate-200 bg-white text-slate-700 active:bg-slate-50'
+                          }`}
+                        >
+                          <span className="text-base font-extrabold leading-none">{r.rating}</span>
+                          <span
+                            className={`mt-1 truncate text-[9px] font-medium leading-none sm:text-[11px] ${
+                              selected ? 'text-emerald-100' : 'text-slate-400'
+                            }`}
+                          >
+                            {r.label}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {c.key === 'cleanliness' && (
+                    <div className="mt-3 rounded-2xl border border-emerald-200 bg-emerald-50/70 p-3">
+                      <p className="mb-2 flex items-center gap-1.5 text-xs font-bold text-emerald-950">
+                        <Building2 className="h-4 w-4 text-emerald-800" />
+                        Which house are you rating?
+                      </p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {(Object.keys(HOSTEL_HOUSES) as HostelHouseCode[]).map((code) => {
+                          const on = selectedHouse === code;
+                          return (
+                            <button
+                              key={code}
+                              type="button"
+                              onClick={() => setSelectedHouse(code)}
+                              aria-pressed={on}
+                              title={HOSTEL_HOUSES[code].name}
+                              className={`press rounded-xl border px-3 py-2 text-xs font-bold transition-colors ${
+                                on
+                                  ? 'border-emerald-900 bg-emerald-800 text-white'
+                                  : 'border-slate-200 bg-white text-slate-700'
+                              }`}
+                            >
+                              {code}
+                              <span className="hidden sm:inline"> - {HOSTEL_HOUSES[code].shortName}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </fieldset>
+              ))}
+
+              {/* Overall */}
+              <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl bg-slate-50 px-4 py-3">
+                <span className="text-xs font-bold text-slate-600">Overall score</span>
+                <span className="flex items-center gap-2">
+                  <span className="text-xl font-black text-slate-900">{computedOverall} / 5</span>
+                  <span className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${sentiment.color}`}>{sentiment.text}</span>
+                </span>
+              </div>
+
+              {/* Comments */}
+              <div>
+                <label htmlFor="review-comments" className="mb-1.5 flex items-center gap-1.5 text-xs font-bold text-slate-700">
+                  <MessageSquare className="h-3.5 w-3.5 text-slate-500" />
+                  Remarks (optional)
+                </label>
+                <textarea
+                  id="review-comments"
+                  value={comments}
+                  onChange={(e) => setComments(e.target.value)}
+                  placeholder="e.g. Rice was well cooked, but the vegetable needed more salt."
+                  rows={2}
+                  className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-base text-slate-800 placeholder-slate-400 outline-none focus:ring-2 focus:ring-emerald-600 sm:text-xs"
+                />
               </div>
             </div>
 
-            {/* Optional Comments */}
-            <div>
-              <label className="flex items-center gap-1.5 text-xs font-bold text-slate-700 mb-1.5">
-                <MessageSquare className="w-3.5 h-3.5 text-slate-500" />
-                <span>Remarks & Specific Feedback (Optional)</span>
-              </label>
-              <textarea
-                value={comments}
-                onChange={(e) => setComments(e.target.value)}
-                placeholder="e.g. Rice was well cooked, but vegetable salt was a bit low. Dining table was clean..."
-                rows={2}
-                className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-600 outline-none text-slate-800 placeholder-slate-400 bg-white"
-              />
-            </div>
-
-            {/* Action buttons */}
-            <div className="flex items-center justify-end gap-3 pt-2">
+            {/* Actions */}
+            <div className="flex shrink-0 items-center justify-end gap-2 border-t border-slate-100 bg-white p-3 sm:px-6">
               <button
                 type="button"
                 onClick={onClose}
-                className="px-5 py-2.5 rounded-xl border border-slate-300 text-xs font-bold text-slate-600 hover:bg-slate-100 transition"
                 disabled={isSubmitting}
+                className="press rounded-full px-5 py-2.5 text-xs font-bold text-slate-600 active:bg-slate-100"
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={isSubmitting}
-                className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-gradient-to-r from-emerald-800 to-teal-800 hover:from-emerald-900 hover:to-teal-900 text-white text-xs font-bold shadow-md hover:shadow-lg transition disabled:opacity-50"
+                className="press flex-1 rounded-full bg-gradient-to-r from-emerald-800 to-teal-800 px-6 py-3 text-xs font-bold text-white shadow-md disabled:opacity-50 sm:flex-none"
               >
-                {isSubmitting ? 'Recording Review...' : 'Submit Food & Cleanliness Review'}
+                {isSubmitting ? 'Submitting…' : 'Submit review'}
               </button>
             </div>
           </form>

@@ -38,7 +38,7 @@ interface DiningCalendarProps {
   onMonthChange: (monthKey: string) => void;
 }
 
-export const DiningCalendar: React.FC<DiningCalendarProps> = ({
+export const DiningCalendar: React.FC<DiningCalendarProps> = React.memo(({
   monthKey,
   todayKey,
   resolve,
@@ -58,7 +58,7 @@ export const DiningCalendar: React.FC<DiningCalendarProps> = ({
   const selectedInfo = selectedDate ? resolve(selectedDate) : null;
 
   return (
-    <section className="rounded-3xl border border-white/80 bg-white/90 p-4 shadow-lg shadow-emerald-950/5 backdrop-blur">
+    <section className="rounded-3xl border border-white/80 bg-white p-4 shadow-lg shadow-emerald-950/5">
       <div className="mb-3 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <CalendarDays className="h-5 w-5 text-emerald-900" />
@@ -69,7 +69,7 @@ export const DiningCalendar: React.FC<DiningCalendarProps> = ({
             type="button"
             aria-label="Previous month"
             onClick={() => onMonthChange(shiftMonth(monthKey, -1))}
-            className="flex h-8 w-8 items-center justify-center rounded-full text-slate-700 transition hover:bg-slate-100"
+            className="press flex h-9 w-9 items-center justify-center rounded-full text-slate-700 active:bg-slate-100"
           >
             <ChevronLeft className="h-5 w-5" />
           </button>
@@ -77,7 +77,7 @@ export const DiningCalendar: React.FC<DiningCalendarProps> = ({
             type="button"
             aria-label="Next month"
             onClick={() => onMonthChange(shiftMonth(monthKey, 1))}
-            className="flex h-8 w-8 items-center justify-center rounded-full text-slate-700 transition hover:bg-slate-100"
+            className="press flex h-9 w-9 items-center justify-center rounded-full text-slate-700 active:bg-slate-100"
           >
             <ChevronRight className="h-5 w-5" />
           </button>
@@ -106,9 +106,9 @@ export const DiningCalendar: React.FC<DiningCalendarProps> = ({
                 onClick={() => onSelectDate(isSelected ? null : dateKey)}
                 aria-label={`${formatLongDate(dateKey)}: ${STATUS_LABEL[info.status]}`}
                 aria-pressed={isSelected}
-                className={`relative flex h-9 w-9 items-center justify-center rounded-full text-[13px] font-semibold transition sm:h-10 sm:w-10 ${CELL_STYLES[info.status]} ${
+                className={`press relative flex h-9 w-9 items-center justify-center rounded-full text-[13px] font-semibold sm:h-10 sm:w-10 ${CELL_STYLES[info.status]} ${
                   isToday ? 'outline outline-2 outline-offset-2 outline-emerald-900' : ''
-                } ${isSelected ? 'scale-110 shadow-md' : 'hover:scale-105'}`}
+                } ${isSelected ? 'shadow-md ring-2 ring-emerald-900' : ''}`}
               >
                 {dayNum}
               </button>
@@ -155,7 +155,8 @@ export const DiningCalendar: React.FC<DiningCalendarProps> = ({
       </div>
     </section>
   );
-};
+});
+DiningCalendar.displayName = 'DiningCalendar';
 
 const LegendDot: React.FC<{ className: string; label: string }> = ({ className, label }) => (
   <span className="flex items-center gap-1.5">

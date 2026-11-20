@@ -20,7 +20,7 @@ interface HeroBannerProps {
   hero: HeroState;
 }
 
-export const HeroBanner: React.FC<HeroBannerProps> = ({ hero }) => {
+export const HeroBanner: React.FC<HeroBannerProps> = React.memo(({ hero }) => {
   if (hero.kind === 'off') {
     return (
       <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-amber-200 via-amber-300 to-yellow-300 p-5 shadow-lg shadow-amber-900/10 ring-1 ring-amber-400/40">
@@ -69,13 +69,14 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({ hero }) => {
       </div>
     </div>
   );
-};
+});
+HeroBanner.displayName = 'HeroBanner';
 
 interface DiningInfoStripProps {
   hero: HeroState;
 }
 
-export const DiningInfoStrip: React.FC<DiningInfoStripProps> = ({ hero }) => {
+export const DiningInfoStrip: React.FC<DiningInfoStripProps> = React.memo(({ hero }) => {
   const isOff = hero.kind === 'off';
   const isInactive = hero.kind === 'inactive';
 
@@ -133,4 +134,5 @@ export const DiningInfoStrip: React.FC<DiningInfoStripProps> = ({ hero }) => {
       )}
     </div>
   );
-};
+});
+DiningInfoStrip.displayName = 'DiningInfoStrip';

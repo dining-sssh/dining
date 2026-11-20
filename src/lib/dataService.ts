@@ -2,6 +2,7 @@ import {
   Student, 
   DiningDailyRecord, 
   MonthlyBill, 
+  PaymentSlip, 
   RebateRequest, 
   MessSettings, 
   HostelHouseCode, 
@@ -14,43 +15,59 @@ import {
   INITIAL_SETTINGS, 
   generateInitialDailyRecords, 
   generateInitialBills, 
+  generateInitialPayments, 
   INITIAL_REBATES,
   INITIAL_REVIEWS
 } from './mockData';
 import { supabase, isSupabaseConfigured } from './supabaseClient';
 
 const STORAGE_KEY_STUDENTS = 'amu_dining_students';
-const STORAGE_KEY_RECORDS = 'amu_dining_records';
-const STORAGE_KEY_BILLS = 'amu_dining_bills';
+// v2 keys: the mock ledger was regenerated (full session of records, consistent bills and slips).
+const STORAGE_KEY_RECORDS = 'amu_dining_records_v2';
+const STORAGE_KEY_BILLS = 'amu_dining_bills_v2';
+const STORAGE_KEY_PAYMENTS = 'amu_dining_payments_v1';
 const STORAGE_KEY_REBATES = 'amu_dining_rebates';
 const STORAGE_KEY_SETTINGS = 'amu_dining_settings';
 const STORAGE_KEY_REVIEWS = 'amu_dining_reviews';
 
-// Helper to get from LocalStorage or initialize with mock data
-function getLocal<T>(key: string, initialData: T): T {
-  if (typeof window === 'undefined') return initialData;
+// Parsed copies of what is in localStorage, so big lists are not re-parsed on every call.
+const parsedCache = new Map<string, { raw: string; value: unknown }>();
+
+// Helper to get from LocalStorage or initialize with mock data.
+// `initialData` may be a function so the mock data is only generated when it is actually needed.
+function getLocal<T>(key: string, initialData: T | (() => T)): T {
+  const resolveInitial = (): T =>
+    typeof initialData === 'function' ? (initialData as () => T)() : initialData;
+
+  if (typeof window === 'undefined') return resolveInitial();
   try {
-    const item = localStorage.getItem(key);
-    if (!item) {
-      localStorage.setItem(key, JSON.stringify(initialData));
-      return initialData;
+    const raw = localStorage.getItem(key);
+    if (!raw) {
+      const initial = resolveInitial();
+      setLocal(key, initial);
+      return initial;
     }
-    return JSON.parse(item);
+    const cached = parsedCache.get(key);
+    if (cached && cached.raw === raw) return cached.value as T;
+    const value = JSON.parse(raw) as T;
+    parsedCache.set(key, { raw, value });
+    return value;
   } catch (e) {
     console.error(`Error reading ${key} from storage:`, e);
-    return initialData;
+    return resolveInitial();
   }
 }
 
 function setLocal<T>(key: string, data: T): void {
   if (typeof window === 'undefined') return;
   try {
-    localStorage.setItem(key, JSON.stringify(data));
+    const raw = JSON.stringify(data);
+    localStorage.setItem(key, raw);
+    parsedCache.set(key, { raw, value: data });
   } catch (e) {
     console.error(`Error writing ${key} to storage:`, e);
   }
 }
-
 export const DataService = {
   // Check connection status
   isLiveSupabase(): boolean {
@@ -180,7 +197,7 @@ export const DataService = {
     const students = await this.getStudents();
     const allRecords = getLocal<DiningDailyRecord[]>(
       STORAGE_KEY_RECORDS, 
-      generateInitialDailyRecords(students)
+      () => generateInitialDailyRecords(students)
     );
 
     let recordsForDate = allRecords.filter(r => r.date === dateStr);
@@ -210,7 +227,7 @@ export const DataService = {
     const students = await this.getStudents();
     return getLocal<DiningDailyRecord[]>(
       STORAGE_KEY_RECORDS, 
-      generateInitialDailyRecords(students)
+      () => generateInitialDailyRecords(students)
     );
   },
 
@@ -238,7 +255,7 @@ export const DataService = {
     const students = await this.getStudents();
     const bills = getLocal<MonthlyBill[]>(
       STORAGE_KEY_BILLS, 
-      generateInitialBills(students)
+      () => generateInitialBills(students)
     );
     if (session) {
       return bills.filter(b => b.session === session);
@@ -254,6 +271,16 @@ export const DataService = {
     );
   },
 
+  // --- PAYMENT SLIPS (Food Charges Slips) ---
+  async getPaymentSlips(): Promise<PaymentSlip[]> {
+    const students = await this.getStudents();
+    return getLocal<PaymentSlip[]>(STORAGE_KEY_PAYMENTS, () => generateInitialPayments(students));
+  },
+
+  async getPaymentSlipsForStudent(enrollmentNo: string): Promise<PaymentSlip[]> {
+    const all = await this.getPaymentSlips();
+    return all.filter(s => s.enrollment_no.toUpperCase() === enrollmentNo.toUpperCase());
+  },
   // --- REBATES ---
   async getRebateRequests(): Promise<RebateRequest[]> {
     return getLocal<RebateRequest[]>(STORAGE_KEY_REBATES, INITIAL_REBATES);
@@ -436,6 +463,8 @@ export const DataService = {
     localStorage.removeItem(STORAGE_KEY_STUDENTS);
     localStorage.removeItem(STORAGE_KEY_RECORDS);
     localStorage.removeItem(STORAGE_KEY_BILLS);
+    localStorage.removeItem(STORAGE_KEY_PAYMENTS);
+    parsedCache.clear();
     localStorage.removeItem(STORAGE_KEY_REBATES);
     localStorage.removeItem(STORAGE_KEY_SETTINGS);
     localStorage.removeItem(STORAGE_KEY_REVIEWS);
