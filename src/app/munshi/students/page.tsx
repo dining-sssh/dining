@@ -3,13 +3,14 @@
 import React, { Suspense, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { Eye, FileSpreadsheet, Search, Trash2, Upload, UserPlus } from 'lucide-react';
+import { Ban, CheckCircle2, Eye, FileSpreadsheet, Search, Trash2, Upload, UserPlus } from 'lucide-react';
 import { HOSTEL_HOUSES, HostelHouseCode, Student } from '@/types';
 import { DataService } from '@/lib/dataService';
 import { formatMoney } from '@/lib/billingUtils';
 import { useProvostData } from '@/components/provost/ProvostData';
 import { CsvUploadModal } from '@/components/csv/CsvUploadModal';
 import { AddStudentModal } from '@/components/provost/AddStudentModal';
+import { CloseDiningModal } from '@/components/munshi/CloseDiningModal';
 import {
   BTN_ACCENT,
   BTN_GHOST,
@@ -52,6 +53,9 @@ function MunshiStudentsView() {
   );
   const [csvOpen, setCsvOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
+  const [closeDiningOpen, setCloseDiningOpen] = useState(false);
+  const [selectedForClose, setSelectedForClose] = useState<Student | null>(null);
+  const [closeNotice, setCloseNotice] = useState<string | null>(null);
 
   const counts = useMemo(() => {
     const c: Partial<Record<HostelHouseCode, number>> = {};
@@ -88,6 +92,18 @@ function MunshiStudentsView() {
         subtitle={`${filtered.length} of ${students.length} residents`}
         actions={
           <>
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedForClose(null);
+                setCloseDiningOpen(true);
+              }}
+              className="press inline-flex items-center gap-1.5 rounded-full border border-rose-300 bg-rose-50 px-4 py-2 text-xs font-bold text-rose-800 shadow-xs hover:bg-rose-100"
+              title="Close dining for resident (Next day rule applies)"
+            >
+              <Ban className="h-4 w-4 text-rose-600" />
+              Close dining
+            </button>
             <button type="button" onClick={() => setCsvOpen(true)} className={BTN_PRIMARY}>
               <Upload className="h-4 w-4" />
               Import CSV
@@ -99,6 +115,13 @@ function MunshiStudentsView() {
           </>
         }
       />
+
+      {closeNotice && (
+        <div className="fade-enter flex items-center gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 p-3 text-xs font-bold text-emerald-800">
+          <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+          <span>{closeNotice}</span>
+        </div>
+      )}
 
       <Card className="space-y-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -169,6 +192,17 @@ function MunshiStudentsView() {
                         <td className="p-3 text-slate-500">{s.previous_room || 'New allotment'}</td>
                         <td className="p-3">
                           <div className="flex justify-end gap-1">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedForClose(s);
+                                setCloseDiningOpen(true);
+                              }}
+                              className="press rounded-lg p-2 text-rose-600 hover:bg-rose-50"
+                              title={`Close dining for ${s.name} (Next day rule applies)`}
+                            >
+                              <Ban className="h-4 w-4" />
+                            </button>
                             <Link
                               href={`/munshi/inspector?student=${s.id}`}
                               className="press rounded-lg p-2 text-slate-500 hover:bg-emerald-50 hover:text-emerald-800"
@@ -218,6 +252,18 @@ function MunshiStudentsView() {
                         {balance > 0 ? `Deficit ${formatMoney(balance)}` : balance < 0 ? `Advance ${formatMoney(-balance)}` : 'Cleared'}
                       </Pill>
                       <div className="flex gap-1">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedForClose(s);
+                            setCloseDiningOpen(true);
+                          }}
+                          className="press rounded-full bg-white p-2.5 text-rose-600 ring-1 ring-slate-200"
+                          aria-label={`Close dining for ${s.name}`}
+                          title="Close dining (Next day rule applies)"
+                        >
+                          <Ban className="h-4 w-4" />
+                        </button>
                         <Link
                           href={`/munshi/inspector?student=${s.id}`}
                           className="press rounded-full bg-white p-2.5 text-emerald-800 ring-1 ring-slate-200"
@@ -252,6 +298,19 @@ function MunshiStudentsView() {
         }}
       />
       <AddStudentModal isOpen={addOpen} onClose={() => setAddOpen(false)} onSuccess={() => reload()} />
+      <CloseDiningModal
+        isOpen={closeDiningOpen}
+        onClose={() => setCloseDiningOpen(false)}
+        student={selectedForClose}
+        students={students}
+        onSuccess={(updatedStudent, actualStartDate, totalDays) => {
+          setCloseNotice(
+            `Dining closed for ${updatedStudent.name} (${updatedStudent.enrollment_no}) effective from ${actualStartDate} (${totalDays} days).`
+          );
+          setTimeout(() => setCloseNotice(null), 5000);
+          reload();
+        }}
+      />
     </>
   );
 }

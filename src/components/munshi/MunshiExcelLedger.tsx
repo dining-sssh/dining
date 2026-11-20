@@ -15,10 +15,12 @@ import {
   AlertCircle,
   Plus,
   Edit2,
-  X
+  X,
+  Ban
 } from 'lucide-react';
 import { Student, DiningDailyRecord, MonthlyBill, PaymentSlip, HOSTEL_HOUSES } from '@/types';
 import { DataService } from '@/lib/dataService';
+import { CloseDiningModal } from '@/components/munshi/CloseDiningModal';
 
 interface MonthLedgerRow {
   monthKey: string;      // '2025-08'
@@ -65,6 +67,7 @@ export const MunshiExcelLedger: React.FC = () => {
   const [lookupSuccessMsg, setLookupSuccessMsg] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [closeDiningOpen, setCloseDiningOpen] = useState(false);
 
   // Sync input fields whenever selected student changes
   useEffect(() => {
@@ -365,6 +368,16 @@ export const MunshiExcelLedger: React.FC = () => {
         <div className="flex items-center gap-2">
           <button
             type="button"
+            onClick={() => setCloseDiningOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-300 text-xs font-bold rounded-lg shadow-xs transition"
+            title="Close dining for resident (Next day rule enforced)"
+          >
+            <Ban className="w-3.5 h-3.5 text-rose-600" />
+            <span>Close Dining</span>
+          </button>
+
+          <button
+            type="button"
             onClick={handleSaveLedger}
             disabled={isSaving}
             className="flex items-center gap-1.5 px-3.5 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold rounded-lg shadow-sm transition disabled:opacity-50"
@@ -502,7 +515,15 @@ export const MunshiExcelLedger: React.FC = () => {
                   {selectedStudent?.house || 'QH'} {selectedStudent?.room_no || '05'}
                 </span>
               </div>
-              <span className="text-[10px] text-slate-500 font-mono">0</span>
+              <button
+                type="button"
+                onClick={() => setCloseDiningOpen(true)}
+                className="text-[10px] font-sans font-bold text-rose-700 hover:text-rose-900 underline flex items-center gap-1"
+                title="Close resident dining (Mess off)"
+              >
+                <Ban className="w-3 h-3 text-rose-600" />
+                <span>Close Mess</span>
+              </button>
             </div>
           </div>
 
@@ -891,6 +912,19 @@ export const MunshiExcelLedger: React.FC = () => {
         </div>
 
       </div>
+
+      <CloseDiningModal
+        isOpen={closeDiningOpen}
+        onClose={() => setCloseDiningOpen(false)}
+        student={selectedStudent}
+        students={students}
+        onSuccess={(updatedStudent, actualStartDate) => {
+          setSaveSuccess(true);
+          setTimeout(() => setSaveSuccess(false), 4000);
+          // Trigger reload for this student
+          setSelectedStudent({ ...updatedStudent });
+        }}
+      />
     </div>
   );
 };

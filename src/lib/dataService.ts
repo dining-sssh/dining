@@ -327,6 +327,97 @@ export const DataService = {
     }
   },
 
+  /**
+   * Closes dining for a student starting from effectiveDate to endDate.
+   * Enforces AMU rule: If the student has already eaten lunch/meals today,
+   * dining cannot be closed on the same day; closure must take effect from the next day.
+   */
+  async closeDiningForStudent(params: {
+    studentId: string;
+    enrollmentNo: string;
+    studentName: string;
+    effectiveDate: string; // YYYY-MM-DD
+    endDate: string;       // YYYY-MM-DD
+    reason: string;
+    markedBy?: string;
+  }): Promise<{ affectedDays: number; rebate: RebateRequest; actualStartDate: string }> {
+    const today = new Date();
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const todayStr = `${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(today.getDate())}`;
+
+    const dailyRecords = await this.getAllDailyRecords();
+
+    // Check if the student has consumed meals today
+    const todayRec = dailyRecords.find((r) => r.student_id === params.studentId && r.date === todayStr);
+    const hasEatenToday = todayRec && (todayRec.lunch || todayRec.dinner || todayRec.eaten) && !todayRec.is_rebate;
+
+    // Enforce Rule: If eaten lunch/meals today, dining CANNOT be closed on the same day
+    let actualStartKey = params.effectiveDate;
+    if (params.effectiveDate <= todayStr && hasEatenToday) {
+      const tomorrow = new Date(today);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      actualStartKey = `${tomorrow.getFullYear()}-${pad(tomorrow.getMonth() + 1)}-${pad(tomorrow.getDate())}`;
+    }
+
+    // Update daily records for all days in the range
+    const cur = new Date(actualStartKey);
+    const end = new Date(params.endDate);
+    let affectedCount = 0;
+
+    const map = new Map(dailyRecords.map((r) => [`${r.student_id}_${r.date}`, r]));
+
+    while (cur <= end) {
+      const dateKey = `${cur.getFullYear()}-${pad(cur.getMonth() + 1)}-${pad(cur.getDate())}`;
+      const existing = map.get(`${params.studentId}_${dateKey}`);
+      if (existing) {
+        map.set(`${params.studentId}_${dateKey}`, {
+          ...existing,
+          is_rebate: true,
+          eaten: false,
+          lunch: false,
+          dinner: false,
+          rebate_reason: params.reason || 'Dining Closed by Munshi',
+          marked_by: params.markedBy || 'Munshi'
+        });
+      } else {
+        map.set(`${params.studentId}_${dateKey}`, {
+          id: `rec-${params.studentId}-${dateKey}`,
+          student_id: params.studentId,
+          enrollment_no: params.enrollmentNo,
+          date: dateKey,
+          eaten: false,
+          lunch: false,
+          dinner: false,
+          is_rebate: true,
+          rebate_reason: params.reason || 'Dining Closed by Munshi',
+          guest_diets: 0,
+          marked_by: params.markedBy || 'Munshi'
+        });
+      }
+      affectedCount++;
+      cur.setDate(cur.getDate() + 1);
+    }
+
+    setLocal(STORAGE_KEY_RECORDS, Array.from(map.values()));
+
+    // Record an approved rebate request for this closure
+    const rebates = await this.getRebateRequests();
+    const newRebate: RebateRequest = {
+      id: `reb-close-${Date.now()}`,
+      student_id: params.studentId,
+      enrollment_no: params.enrollmentNo,
+      student_name: params.studentName,
+      start_date: actualStartKey,
+      end_date: params.endDate,
+      reason: params.reason || 'Official Dining Closure by Munshi',
+      status: 'approved',
+      created_at: todayStr
+    };
+    setLocal(STORAGE_KEY_REBATES, [newRebate, ...rebates]);
+
+    return { affectedDays: affectedCount, rebate: newRebate, actualStartDate: actualStartKey };
+  },
+
   // --- SETTINGS ---
   async getSettings(): Promise<MessSettings> {
     return getLocal<MessSettings>(STORAGE_KEY_SETTINGS, INITIAL_SETTINGS);
