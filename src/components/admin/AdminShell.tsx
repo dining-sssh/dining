@@ -140,7 +140,7 @@ export const AdminShell: React.FC<AdminShellProps> = ({ panelName, panelNote, na
 
       <main className="px-4 pb-24 pt-5 lg:ml-64 lg:px-8 lg:py-8">
         {/* key = path, so every page change fades/slides in (transform + opacity only) */}
-        <div key={pathname} className="tab-enter mx-auto w-full max-w-6xl space-y-5">
+        <div key={pathname} className="tab-enter mx-auto w-full max-w-7xl space-y-5">
           {children}
         </div>
       </main>

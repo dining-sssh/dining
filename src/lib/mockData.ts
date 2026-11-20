@@ -13,6 +13,19 @@ export const INITIAL_SETTINGS: MessSettings = {
 
 export const INITIAL_STUDENTS: Student[] = [
   {
+    id: 's-ayaz',
+    enrollment_no: 'GL8373',
+    name: 'AYAZ IRFAN',
+    house: 'HM',
+    room_no: '21',
+    course: 'B.TECH.',
+    email: 'gl8373@myamu.ac.in',
+    previous_room: 'H.M. A08',
+    phone: '+91 9876543200',
+    session: '2025-2026',
+    status: 'active'
+  },
+  {
     id: 's-1',
     enrollment_no: 'GJ1021',
     name: 'Tariq Anwar',

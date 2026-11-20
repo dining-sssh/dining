@@ -202,6 +202,7 @@ function StudentsView() {
                           {s.house}
                         </span>
                         <p className="mt-1 text-sm font-extrabold text-slate-900">Room {s.room_no}</p>
+                        <p className="text-[10px] text-slate-400">Prev: {s.previous_room || 'New Allotment'}</p>
                       </div>
                     </div>
                     <div className="mt-3 flex items-center justify-between gap-2">

@@ -8,6 +8,8 @@ import {
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
+  ClipboardList,
+  FileSpreadsheet,
   Minus,
   Plus,
   Save,
@@ -28,6 +30,7 @@ import {
   StatCard
 } from '@/components/admin/ui';
 import { addDays, formatLongDate, isEaten, toDateKey } from '@/components/student/studentUtils';
+import { MunshiExcelLedger } from '@/components/munshi/MunshiExcelLedger';
 
 type RecordMap = Record<string, DiningDailyRecord>;
 
@@ -45,6 +48,7 @@ const blankRecord = (s: Student, date: string): DiningDailyRecord => ({
 });
 
 export default function MunshiRegisterPage() {
+  const [viewMode, setViewMode] = useState<'excel' | 'daily'>('excel');
   const todayKey = useMemo(() => toDateKey(new Date()), []);
 
   const [students, setStudents] = useState<Student[]>([]);
@@ -171,8 +175,46 @@ export default function MunshiRegisterPage() {
 
   return (
     <>
-      <PageHeader
-        title="Daily Register"
+      {/* Top View Selector: AMU Excel Ledger vs Daily Checklist */}
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-3">
+        <div className="inline-flex rounded-xl bg-slate-200/80 p-1 text-xs font-bold text-slate-700 shadow-inner">
+          <button
+            type="button"
+            onClick={() => setViewMode('excel')}
+            className={`flex items-center gap-2 rounded-lg px-4 py-2 transition-all ${
+              viewMode === 'excel'
+                ? 'bg-emerald-800 text-white shadow'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <FileSpreadsheet className="h-4 w-4" />
+            AMU Dining Ledger (Excel)
+          </button>
+          <button
+            type="button"
+            onClick={() => setViewMode('daily')}
+            className={`flex items-center gap-2 rounded-lg px-4 py-2 transition-all ${
+              viewMode === 'daily'
+                ? 'bg-emerald-800 text-white shadow'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <ClipboardList className="h-4 w-4" />
+            Daily Attendance Checklist
+          </button>
+        </div>
+
+        <div className="text-xs text-slate-500 font-medium">
+          {viewMode === 'excel' ? 'Full 12-month student ledger with payments & deficits' : 'Quick day-by-day mess marking'}
+        </div>
+      </div>
+
+      {viewMode === 'excel' ? (
+        <MunshiExcelLedger />
+      ) : (
+        <>
+          <PageHeader
+            title="Daily Register"
         subtitle={formatLongDate(date)}
         actions={
           <button type="button" onClick={save} disabled={saving || !dirty} className={BTN_PRIMARY}>
@@ -283,6 +325,9 @@ export default function MunshiRegisterPage() {
                         {s.house}
                       </span>
                       <span className="text-sm font-extrabold leading-tight text-slate-900">{s.room_no}</span>
+                      <span className="text-[9px] text-slate-400 font-medium text-center truncate max-w-[42px]" title={`Previous: ${s.previous_room || 'New Allotment'}`}>
+                        {s.previous_room || 'New'}
+                      </span>
                     </div>
                     <div className="min-w-0">
                       <p className="truncate text-sm font-bold text-slate-900">{s.name}</p>
@@ -361,6 +406,8 @@ export default function MunshiRegisterPage() {
             {saving ? 'Saving…' : 'Save register'}
           </button>
         </div>
+      )}
+        </>
       )}
     </>
   );
