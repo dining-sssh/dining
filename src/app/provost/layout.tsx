@@ -1,0 +1,53 @@
+'use client';
+
+import React from 'react';
+import { CheckCircle, CreditCard, LayoutDashboard, Settings, UserCheck, Users, Utensils } from 'lucide-react';
+import { AuthSession } from '@/types';
+import { AuthGuard } from '@/components/auth/AuthGuard';
+import { AdminShell, AdminNavItem } from '@/components/admin/AdminShell';
+import { ProvostDataProvider, useProvostData } from '@/components/provost/ProvostData';
+
+const Frame: React.FC<{
+  session: AuthSession;
+  onLogout: () => void;
+  children: React.ReactNode;
+}> = ({ session, onLogout, children }) => {
+  const { rebates } = useProvostData();
+  const pending = rebates.filter((r) => r.status === 'pending').length;
+
+  const nav: AdminNavItem[] = [
+    { href: '/provost', label: 'Overview', icon: LayoutDashboard, exact: true },
+    { href: '/provost/students', label: 'Students', icon: Users },
+    { href: '/provost/billing', label: 'Billing', icon: CreditCard },
+    { href: '/provost/rebates', label: 'Rebates', icon: CheckCircle, badge: pending },
+    { href: '/provost/reviews', label: 'Food & Cleanliness', icon: Utensils },
+    { href: '/provost/rates', label: 'Rates & Policies', icon: Settings },
+    { href: '/provost/inspector', label: 'Student View', icon: UserCheck }
+  ];
+
+  return (
+    <AdminShell
+      panelName="Provost"
+      panelNote="Admin level 1 · Oversight"
+      nav={nav}
+      session={session}
+      onLogout={onLogout}
+    >
+      {children}
+    </AdminShell>
+  );
+};
+
+export default function ProvostLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <AuthGuard allow={['provost']}>
+      {({ session, logout }) => (
+        <ProvostDataProvider>
+          <Frame session={session} onLogout={logout}>
+            {children}
+          </Frame>
+        </ProvostDataProvider>
+      )}
+    </AuthGuard>
+  );
+}

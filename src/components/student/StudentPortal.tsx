@@ -21,6 +21,8 @@ interface StudentPortalProps {
   enforcedStudentId?: string;
   /** Shown on the Profile tab (student sessions only). */
   onLogout?: () => void;
+  /** Admin inspector only: which resident to open first. */
+  initialStudentId?: string;
 }
 
 // One background layer instead of several blurred or rotated elements: cheaper to paint while scrolling.
@@ -29,7 +31,7 @@ const PAGE_BACKGROUND =
   'radial-gradient(circle at 0% 100%, rgba(4,120,87,0.16) 0, transparent 40%), ' +
   'linear-gradient(to bottom, #f4f9f6, #e5efe9)';
 
-export const StudentPortal: React.FC<StudentPortalProps> = ({ enforcedStudentId, onLogout }) => {
+export const StudentPortal: React.FC<StudentPortalProps> = ({ enforcedStudentId, onLogout, initialStudentId }) => {
   const isStudentSession = Boolean(enforcedStudentId);
   const todayKey = useMemo(() => toDateKey(new Date()), []);
   const currentSession = useMemo(() => sessionOfDate(todayKey), [todayKey]);
@@ -71,8 +73,12 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({ enforcedStudentId,
       setActiveStudent(students.find((s) => s.id === enforcedStudentId) ?? null);
       return;
     }
-    setActiveStudent((prev) => (prev && students.some((s) => s.id === prev.id) ? prev : students[0] ?? null));
-  }, [students, studentsLoaded, enforcedStudentId]);
+    setActiveStudent((prev) =>
+      prev && students.some((s) => s.id === prev.id)
+        ? prev
+        : students.find((s) => s.id === initialStudentId) ?? students[0] ?? null
+    );
+  }, [students, studentsLoaded, enforcedStudentId, initialStudentId]);
 
   // Everything for one student is loaded in a single round, so switching tabs never waits on data.
   const latestLoad = useRef(0);

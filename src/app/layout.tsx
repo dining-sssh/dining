@@ -3,7 +3,7 @@ import './globals.css';
 
 export const metadata: Metadata = {
   title: 'AMU Dining Hall System | Provost, Munshi & Student Portal',
-  description: 'Comprehensive Dining Management System for AMU Sir Syed Hall with Supabase, Two-Level Admin (Provost, Munshi), CSV Student Import, and Day-Wise Dining Register.',
+  description: 'Dining management for Sir Shah Sulaiman Hall, AMU: separate Provost, Munshi and Student panels, CSV student import and a day-wise dining register.',
 };
 
 export default function RootLayout({

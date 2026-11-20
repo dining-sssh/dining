@@ -20,9 +20,10 @@ import { supabase, isSupabaseConfigured } from '@/lib/supabaseClient';
 
 interface AuthLandingProps {
   onLogin: (session: AuthSession) => void;
+  onResetData?: () => void;
 }
 
-export const AuthLanding: React.FC<AuthLandingProps> = ({ onLogin }) => {
+export const AuthLanding: React.FC<AuthLandingProps> = ({ onLogin, onResetData }) => {
   const [students, setStudents] = useState<Student[]>([]);
   const [gmailInput, setGmailInput] = useState('');
   const [selectedPanel, setSelectedPanel] = useState<UserRole>('student');
@@ -119,7 +120,7 @@ export const AuthLanding: React.FC<AuthLandingProps> = ({ onLogin }) => {
       <div className="max-w-4xl mx-auto w-full text-center pb-6">
         <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-amber-500/10 border border-amber-400/30 text-amber-300 text-xs font-bold uppercase tracking-wider mb-4 shadow-inner">
           <Award className="w-4 h-4 text-amber-400" />
-          Aligarh Muslim University • Sir Syed Hall (South)
+          Aligarh Muslim University • Sir Shah Sulaiman Hall
         </div>
         <h1 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight text-white">
           AMU DINING PORTAL
@@ -343,7 +344,12 @@ export const AuthLanding: React.FC<AuthLandingProps> = ({ onLogin }) => {
 
       {/* Footer */}
       <div className="max-w-4xl mx-auto w-full text-center text-xs text-slate-400 pt-6">
-        Sir Syed Hall Dining Management System • Aligarh Muslim University • Google Authentication & Supabase
+        <div>Sir Shah Sulaiman Hall Dining Management System • Aligarh Muslim University</div>
+        {onResetData && (
+          <button type="button" onClick={onResetData} className="mt-2 text-slate-500 underline-offset-2 hover:text-slate-300 hover:underline">
+            Reset demo records
+          </button>
+        )}
       </div>
     </div>
   );
