@@ -51,7 +51,7 @@ export const AddStudentModal: React.FC<AddStudentModalProps> = ({ isOpen, onClos
         room_no: roomNo.trim(),
         course: course.trim() || 'General Course',
         email: email.trim() || `${enrollmentNo.trim().toLowerCase()}@myamu.ac.in`,
-        previous_room: previousRoom.trim() || 'N/A',
+        previous_room: previousRoom.trim() || 'New Allotment',
         phone: phone.trim() || undefined,
         session: '2026-2027',
         status: 'active'

@@ -73,6 +73,7 @@ export const DataService = {
   async addStudent(student: Omit<Student, 'id'>): Promise<Student> {
     const newStudent: Student = {
       ...student,
+      previous_room: student.previous_room?.trim() || 'New Allotment',
       id: `s-${Date.now()}`
     };
 
@@ -141,7 +142,7 @@ export const DataService = {
         room_no: row.room_no.trim(),
         course: row.course?.trim() || 'General Course',
         email: row.email?.trim() || `${enr.toLowerCase()}@myamu.ac.in`,
-        previous_room: row.previous_room?.trim() || 'N/A',
+        previous_room: row.previous_room?.trim() || 'New Allotment',
         session: '2026-2027',
         status: 'active'
       });

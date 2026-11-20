@@ -90,6 +90,7 @@ export const ProvostDashboard: React.FC = () => {
       s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       s.enrollment_no.toLowerCase().includes(searchQuery.toLowerCase()) ||
       s.room_no.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (s.previous_room && s.previous_room.toLowerCase().includes(searchQuery.toLowerCase())) ||
       s.course.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesHouse = selectedHouseFilter === 'ALL' || s.house === selectedHouseFilter;
     return matchesSearch && matchesHouse;
@@ -328,7 +329,7 @@ export const ProvostDashboard: React.FC = () => {
 
                 <button
                   onClick={() => {
-                    const csvData = students.map(s => `${s.enrollment_no},${s.name},${s.house},${s.room_no},${s.course},${s.email},${s.previous_room || 'N/A'}`).join('\n');
+                    const csvData = students.map(s => `${s.enrollment_no},${s.name},${s.house},${s.room_no},${s.course},${s.email},${s.previous_room || 'New Allotment'}`).join('\n');
                     const blob = new Blob(['Enrollment Number,Name,House,Room Number,Course,Email,Previous room\n' + csvData], { type: 'text/csv' });
                     const url = URL.createObjectURL(blob);
                     const a = document.createElement('a');
@@ -430,7 +431,7 @@ export const ProvostDashboard: React.FC = () => {
 
                           <td className="p-3 text-slate-600">{student.course}</td>
                           <td className="p-3 text-slate-500 font-mono text-[11px]">{student.email}</td>
-                          <td className="p-3 text-slate-500">{student.previous_room || 'N/A'}</td>
+                          <td className="p-3 text-slate-500">{student.previous_room || 'New Allotment'}</td>
                           <td className="p-3 text-right">
                             <button
                               onClick={() => handleDeleteStudent(student.id, student.name)}

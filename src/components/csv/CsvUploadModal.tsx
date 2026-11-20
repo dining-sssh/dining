@@ -91,7 +91,7 @@ export const CsvUploadModal: React.FC<CsvUploadModalProps> = ({ isOpen, onClose,
           const room = getVal(['roomnumber', 'roomno', 'room']);
           const course = getVal(['course', 'couse', 'branch', 'programme']) || 'Undergraduate';
           const email = getVal(['email', 'emailid', 'mail']) || `${enrollment.toLowerCase()}@myamu.ac.in`;
-          const prevRoom = getVal(['previousroom', 'prevroom', 'oldroom']) || 'N/A';
+          const prevRoom = getVal(['previousroom', 'prevroom', 'oldroom']) || 'New Allotment';
 
           const houseCode = normalizeHouseCode(rawHouse);
           let isValid = true;
@@ -333,7 +333,7 @@ export const CsvUploadModal: React.FC<CsvUploadModalProps> = ({ isOpen, onClose,
                         </td>
                         <td className="p-2.5 font-medium">{row.room_no}</td>
                         <td className="p-2.5 text-slate-600">{row.course}</td>
-                        <td className="p-2.5 text-slate-500">{row.previous_room || 'N/A'}</td>
+                        <td className="p-2.5 text-slate-500">{row.previous_room || 'New Allotment'}</td>
                       </tr>
                     ))}
                   </tbody>
