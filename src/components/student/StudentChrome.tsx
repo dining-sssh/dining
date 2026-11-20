@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Bell, CalendarDays, Home, Receipt, UserRound, GraduationCap } from 'lucide-react';
+import { Bell, CalendarDays, Home, Receipt, UserRound, GraduationCap, Utensils } from 'lucide-react';
 import { HALL_NAME } from './studentUtils';
 
 /* ------------------------------------------------------------------ */
@@ -53,11 +53,12 @@ export const StudentHeader: React.FC<StudentHeaderProps> = ({ hasAlerts, onBellC
 /* Bottom navigation                                                   */
 /* ------------------------------------------------------------------ */
 
-export type StudentTab = 'home' | 'log' | 'bills' | 'profile';
+export type StudentTab = 'home' | 'log' | 'reviews' | 'bills' | 'profile';
 
 const TABS: Array<{ id: StudentTab; label: string; icon: React.ElementType }> = [
   { id: 'home', label: 'Home', icon: Home },
-  { id: 'log', label: 'Dining Log', icon: CalendarDays },
+  { id: 'log', label: 'Log', icon: CalendarDays },
+  { id: 'reviews', label: 'Reviews', icon: Utensils },
   { id: 'bills', label: 'Bills', icon: Receipt },
   { id: 'profile', label: 'Profile', icon: UserRound }
 ];

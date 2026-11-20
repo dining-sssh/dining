@@ -16,20 +16,24 @@ import {
   FileSpreadsheet,
   Building,
   TrendingUp,
-  DollarSign
+  DollarSign,
+  Utensils,
+  Star
 } from 'lucide-react';
-import { Student, HostelHouseCode, HOSTEL_HOUSES, MonthlyBill, RebateRequest, MessSettings } from '@/types';
+import { Student, HostelHouseCode, HOSTEL_HOUSES, MonthlyBill, RebateRequest, MessSettings, DailyReviewSummary } from '@/types';
 import { DataService } from '@/lib/dataService';
 import { CsvUploadModal } from '../csv/CsvUploadModal';
 import { AddStudentModal } from './AddStudentModal';
+import { DailyReviewReport } from '../reviews/DailyReviewReport';
 
 export const ProvostDashboard: React.FC = () => {
   const [students, setStudents] = useState<Student[]>([]);
   const [bills, setBills] = useState<MonthlyBill[]>([]);
   const [rebates, setRebates] = useState<RebateRequest[]>([]);
   const [settings, setSettings] = useState<MessSettings | null>(null);
+  const [todayReviewSummary, setTodayReviewSummary] = useState<DailyReviewSummary | null>(null);
 
-  const [activeTab, setActiveTab] = useState<'students' | 'rates' | 'billing' | 'rebates'>('students');
+  const [activeTab, setActiveTab] = useState<'students' | 'rates' | 'billing' | 'rebates' | 'reviews'>('students');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedHouseFilter, setSelectedHouseFilter] = useState<string>('ALL');
 
@@ -43,17 +47,20 @@ export const ProvostDashboard: React.FC = () => {
   }, []);
 
   const loadAllData = async () => {
-    const [st, bl, rb, stg] = await Promise.all([
+    const todayStr = new Date().toISOString().split('T')[0];
+    const [st, bl, rb, stg, revSummary] = await Promise.all([
       DataService.getStudents(),
       DataService.getMonthlyBills(),
       DataService.getRebateRequests(),
-      DataService.getSettings()
+      DataService.getSettings(),
+      DataService.getDailyReviewSummary(todayStr)
     ]);
     setStudents(st);
     setBills(bl);
     setRebates(rb);
     setSettings(stg);
     setRateForm(stg);
+    setTodayReviewSummary(revSummary);
   };
 
   const handleDeleteStudent = async (id: string, name: string) => {
@@ -266,6 +273,22 @@ export const ProvostDashboard: React.FC = () => {
         >
           <CheckCircle className="w-4 h-4" />
           Rebate Approvals ({rebates.filter(r => r.status === 'pending').length} Pending)
+        </button>
+
+        <button
+          onClick={() => setActiveTab('reviews')}
+          className={`flex items-center gap-2 px-4 py-2.5 text-xs sm:text-sm font-bold border-b-2 transition ${
+            activeTab === 'reviews'
+              ? 'border-emerald-800 text-emerald-900 bg-white'
+              : 'border-transparent text-slate-500 hover:text-slate-800'
+          }`}
+        >
+          <Utensils className="w-4 h-4 text-amber-600" />
+          Food & Cleanliness Audit {todayReviewSummary && todayReviewSummary.total_reviews > 0 && (
+            <span className="bg-amber-100 text-amber-900 text-[10px] font-extrabold px-1.5 py-0.2 rounded-full border border-amber-300">
+              ★ {todayReviewSummary.overall_score}
+            </span>
+          )}
         </button>
       </div>
 
@@ -661,6 +684,11 @@ export const ProvostDashboard: React.FC = () => {
             </table>
           </div>
         </div>
+      )}
+
+      {/* Tab 5: Food & Cleanliness Audit */}
+      {activeTab === 'reviews' && (
+        <DailyReviewReport userRole="provost" />
       )}
 
       {/* CSV Modal */}

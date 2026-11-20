@@ -1,10 +1,21 @@
-import { Student, DiningDailyRecord, MonthlyBill, RebateRequest, MessSettings, HostelHouseCode } from '@/types';
+import { 
+  Student, 
+  DiningDailyRecord, 
+  MonthlyBill, 
+  RebateRequest, 
+  MessSettings, 
+  HostelHouseCode, 
+  FoodReview, 
+  DailyReviewSummary, 
+  HOSTEL_HOUSES 
+} from '@/types';
 import { 
   INITIAL_STUDENTS, 
   INITIAL_SETTINGS, 
   generateInitialDailyRecords, 
   generateInitialBills, 
-  INITIAL_REBATES 
+  INITIAL_REBATES,
+  INITIAL_REVIEWS
 } from './mockData';
 import { supabase, isSupabaseConfigured } from './supabaseClient';
 
@@ -13,6 +24,7 @@ const STORAGE_KEY_RECORDS = 'amu_dining_records';
 const STORAGE_KEY_BILLS = 'amu_dining_bills';
 const STORAGE_KEY_REBATES = 'amu_dining_rebates';
 const STORAGE_KEY_SETTINGS = 'amu_dining_settings';
+const STORAGE_KEY_REVIEWS = 'amu_dining_reviews';
 
 // Helper to get from LocalStorage or initialize with mock data
 function getLocal<T>(key: string, initialData: T): T {
@@ -296,6 +308,128 @@ export const DataService = {
     setLocal(STORAGE_KEY_SETTINGS, settings);
   },
 
+  // --- FOOD & CLEANLINESS REVIEWS ---
+  async getFoodReviews(): Promise<FoodReview[]> {
+    return getLocal<FoodReview[]>(STORAGE_KEY_REVIEWS, INITIAL_REVIEWS);
+  },
+
+  async addFoodReview(
+    review: Omit<FoodReview, 'id' | 'created_at' | 'overall_rating'> & { overall_rating?: number }
+  ): Promise<FoodReview> {
+    const overall =
+      review.overall_rating ??
+      Number(
+        ((review.quality_rating + review.quantity_rating + review.taste_rating + review.cleanliness_rating) / 4).toFixed(1)
+      );
+
+    const newReview: FoodReview = {
+      ...review,
+      id: `rev-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      overall_rating: overall,
+      created_at: new Date().toISOString()
+    };
+
+    const currentReviews = await this.getFoodReviews();
+    const updated = [newReview, ...currentReviews];
+    setLocal(STORAGE_KEY_REVIEWS, updated);
+    return newReview;
+  },
+
+  async getReviewsForDate(dateStr: string): Promise<FoodReview[]> {
+    const all = await this.getFoodReviews();
+    return all.filter((r) => r.date === dateStr);
+  },
+
+  async getDailyReviewSummary(dateStr: string): Promise<DailyReviewSummary> {
+    const all = await this.getFoodReviews();
+    const dayReviews = all.filter((r) => r.date === dateStr);
+
+    const houseList: HostelHouseCode[] = ['HM', 'BH', 'QH', 'KH', 'AK', 'MB'];
+    const initialHouseStats: DailyReviewSummary['house_cleanliness'] = {} as DailyReviewSummary['house_cleanliness'];
+
+    houseList.forEach((code) => {
+      initialHouseStats[code] = {
+        house: code,
+        houseName: HOSTEL_HOUSES[code]?.name || code,
+        averageScore: 0,
+        reviewCount: 0
+      };
+    });
+
+    if (dayReviews.length === 0) {
+      return {
+        date: dateStr,
+        total_reviews: 0,
+        overall_score: 0,
+        quality_score: 0,
+        quantity_score: 0,
+        taste_score: 0,
+        cleanliness_score: 0,
+        house_cleanliness: initialHouseStats,
+        reviews: []
+      };
+    }
+
+    let sumQuality = 0;
+    let sumQuantity = 0;
+    let sumTaste = 0;
+    let sumCleanliness = 0;
+    let sumOverall = 0;
+
+    const houseScoresMap: Record<HostelHouseCode, { sum: number; count: number }> = {
+      HM: { sum: 0, count: 0 },
+      BH: { sum: 0, count: 0 },
+      QH: { sum: 0, count: 0 },
+      KH: { sum: 0, count: 0 },
+      AK: { sum: 0, count: 0 },
+      MB: { sum: 0, count: 0 }
+    };
+
+    dayReviews.forEach((rev) => {
+      sumQuality += rev.quality_rating;
+      sumQuantity += rev.quantity_rating;
+      sumTaste += rev.taste_rating;
+      sumCleanliness += rev.cleanliness_rating;
+      sumOverall += rev.overall_rating;
+
+      if (houseScoresMap[rev.cleanliness_house]) {
+        houseScoresMap[rev.cleanliness_house].sum += rev.cleanliness_rating;
+        houseScoresMap[rev.cleanliness_house].count += 1;
+      }
+    });
+
+    const total = dayReviews.length;
+
+    houseList.forEach((code) => {
+      const stats = houseScoresMap[code];
+      const avg = stats.count > 0 ? Number((stats.sum / stats.count).toFixed(1)) : 0;
+      initialHouseStats[code] = {
+        house: code,
+        houseName: HOSTEL_HOUSES[code]?.name || code,
+        averageScore: avg,
+        reviewCount: stats.count
+      };
+    });
+
+    return {
+      date: dateStr,
+      total_reviews: total,
+      overall_score: Number((sumOverall / total).toFixed(1)),
+      quality_score: Number((sumQuality / total).toFixed(1)),
+      quantity_score: Number((sumQuantity / total).toFixed(1)),
+      taste_score: Number((sumTaste / total).toFixed(1)),
+      cleanliness_score: Number((sumCleanliness / total).toFixed(1)),
+      house_cleanliness: initialHouseStats,
+      reviews: dayReviews
+    };
+  },
+
+  async getAllDailyReviewSummaries(): Promise<DailyReviewSummary[]> {
+    const all = await this.getFoodReviews();
+    const uniqueDates = Array.from(new Set(all.map((r) => r.date))).sort().reverse();
+    return Promise.all(uniqueDates.map((d) => this.getDailyReviewSummary(d)));
+  },
+
   // Reset to initial mock data
   resetAllData(): void {
     if (typeof window === 'undefined') return;
@@ -304,5 +438,6 @@ export const DataService = {
     localStorage.removeItem(STORAGE_KEY_BILLS);
     localStorage.removeItem(STORAGE_KEY_REBATES);
     localStorage.removeItem(STORAGE_KEY_SETTINGS);
+    localStorage.removeItem(STORAGE_KEY_REVIEWS);
   }
 };

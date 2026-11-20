@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Clock, ChevronRight, Send, ShieldAlert, Receipt } from 'lucide-react';
+import { Clock, ChevronRight, Send, ShieldAlert, Receipt, Star, Utensils } from 'lucide-react';
 import { Student, DiningDailyRecord, MonthlyBill, RebateRequest } from '@/types';
 import { DataService } from '@/lib/dataService';
 import { StudentHeader, BottomNav, StudentTab } from './StudentChrome';
@@ -11,6 +11,8 @@ import { LogView } from './LogView';
 import { BillsView } from './BillsView';
 import { ProfileView } from './ProfileView';
 import { RebateModal, RebateFormValues } from './RebateModal';
+import { DailyReviewReport } from '../reviews/DailyReviewReport';
+import { ReviewFormModal } from '../reviews/ReviewFormModal';
 import { computeHeroState, createDayResolver, toDateKey } from './studentUtils';
 
 interface StudentPortalProps {
@@ -39,6 +41,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({ enforcedStudentId,
   const [records, setRecords] = useState<DiningDailyRecord[]>([]);
   const [rebates, setRebates] = useState<RebateRequest[]>([]);
   const [isRebateOpen, setIsRebateOpen] = useState(false);
+  const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
 
   /* ---------------------------- data loading ---------------------------- */
 
@@ -208,6 +211,30 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({ enforcedStudentId,
 
               <button
                 type="button"
+                onClick={() => setIsReviewModalOpen(true)}
+                className="flex w-full items-center gap-3 rounded-2xl border border-amber-200/90 bg-gradient-to-r from-amber-50 to-emerald-50/70 p-3.5 text-left shadow-sm transition hover:shadow-md hover:bg-white"
+              >
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-400 text-emerald-950 shadow-sm">
+                  <Star className="h-5 w-5 fill-emerald-950" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5">
+                    <p className="text-[11px] font-black uppercase tracking-wider text-emerald-900">
+                      Food & Cleanliness Review
+                    </p>
+                    <span className="text-[9px] bg-emerald-800 text-white font-extrabold px-1.5 py-0.2 rounded">
+                      House Wise
+                    </span>
+                  </div>
+                  <p className="text-xs font-semibold text-slate-700 mt-0.5">
+                    Rate today's taste, quality, quantity & hostel cleanliness
+                  </p>
+                </div>
+                <ChevronRight className="h-5 w-5 text-slate-400" />
+              </button>
+
+              <button
+                type="button"
                 onClick={() => setTab('bills')}
                 className="flex w-full items-center gap-3 rounded-2xl border border-white/80 bg-white/90 p-3.5 text-left shadow-sm transition hover:bg-white"
               >
@@ -260,6 +287,14 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({ enforcedStudentId,
           />
         )}
 
+        {tab === 'reviews' && (
+          <DailyReviewReport
+            userRole="student"
+            activeStudent={activeStudent}
+            onOpenReviewModal={() => setIsReviewModalOpen(true)}
+          />
+        )}
+
         {tab === 'bills' && (
           <BillsView
             student={activeStudent}
@@ -283,6 +318,15 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({ enforcedStudentId,
       <BottomNav active={tab} onChange={setTab} />
 
       <RebateModal open={isRebateOpen} onClose={() => setIsRebateOpen(false)} onSubmit={handleSubmitRebate} />
+
+      <ReviewFormModal
+        open={isReviewModalOpen}
+        onClose={() => setIsReviewModalOpen(false)}
+        onReviewSubmitted={() => {
+          // Refresh if in reviews tab
+        }}
+        activeStudent={activeStudent}
+      />
     </div>
   );
 };

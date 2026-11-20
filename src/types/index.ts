@@ -132,3 +132,41 @@ export interface MessSettings {
   hall_name: string;
   min_rebate_days: number;
 }
+
+export type RatingScale = 1 | 2 | 3 | 4 | 5;
+
+export interface FoodReview {
+  id: string;
+  student_id: string;
+  student_name: string;
+  enrollment_no: string;
+  date: string; // YYYY-MM-DD
+  meal_type: 'lunch' | 'dinner' | 'all_day';
+  quality_rating: RatingScale; // 1-5
+  quantity_rating: RatingScale; // 1-5
+  taste_rating: RatingScale; // 1-5
+  cleanliness_rating: RatingScale; // 1-5
+  cleanliness_house: HostelHouseCode; // e.g. HM, QH
+  overall_rating: number; // average of 4 ratings (1-5)
+  comments?: string;
+  created_at: string;
+}
+
+export interface HouseCleanlinessSummary {
+  house: HostelHouseCode;
+  houseName: string;
+  averageScore: number;
+  reviewCount: number;
+}
+
+export interface DailyReviewSummary {
+  date: string;
+  total_reviews: number;
+  overall_score: number; // 0 - 5
+  quality_score: number;
+  quantity_score: number;
+  taste_score: number;
+  cleanliness_score: number;
+  house_cleanliness: Record<HostelHouseCode, HouseCleanlinessSummary>;
+  reviews: FoodReview[];
+}

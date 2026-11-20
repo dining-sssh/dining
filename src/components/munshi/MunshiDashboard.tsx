@@ -20,17 +20,19 @@ import {
   Grid, 
   List,
   Download,
-  AlertCircle
+  AlertCircle,
+  Star
 } from 'lucide-react';
 import { Student, DiningDailyRecord, HOSTEL_HOUSES, HostelHouseCode } from '@/types';
 import { DataService } from '@/lib/dataService';
+import { DailyReviewReport } from '../reviews/DailyReviewReport';
 
 export const MunshiDashboard: React.FC = () => {
   const [students, setStudents] = useState<Student[]>([]);
   const [allRecords, setAllRecords] = useState<DiningDailyRecord[]>([]);
   const [currentDate, setCurrentDate] = useState<string>('2026-11-20');
   const [selectedMonth, setSelectedMonth] = useState<string>('2026-11');
-  const [viewMode, setViewMode] = useState<'daily' | 'matrix'>('daily');
+  const [viewMode, setViewMode] = useState<'daily' | 'matrix' | 'reviews'>('daily');
 
   const [houseFilter, setHouseFilter] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
@@ -230,7 +232,7 @@ export const MunshiDashboard: React.FC = () => {
             </div>
           </div>
 
-          {/* View Mode Switcher: Daily Register vs Full Month Matrix */}
+          {/* View Mode Switcher: Daily Register vs Full Month Matrix vs Food Reviews */}
           <div className="flex items-center gap-2">
             <div className="bg-slate-100 p-1 rounded-xl flex items-center gap-1">
               <button
@@ -255,16 +257,29 @@ export const MunshiDashboard: React.FC = () => {
                 <Grid className="w-4 h-4" />
                 30-Day Matrix
               </button>
+              <button
+                onClick={() => setViewMode('reviews')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition ${
+                  viewMode === 'reviews'
+                    ? 'bg-emerald-800 text-white shadow-sm'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <Utensils className="w-4 h-4" />
+                Food & Cleanliness
+              </button>
             </div>
 
-            <button
-              onClick={handleSaveRegister}
-              disabled={isSaving}
-              className="flex items-center gap-2 px-5 py-2.5 bg-emerald-800 hover:bg-emerald-900 text-white rounded-xl text-xs font-bold transition shadow-sm disabled:opacity-50"
-            >
-              <Save className="w-4 h-4" />
-              {isSaving ? 'Saving...' : 'Save Register'}
-            </button>
+            {viewMode !== 'reviews' && (
+              <button
+                onClick={handleSaveRegister}
+                disabled={isSaving}
+                className="flex items-center gap-2 px-5 py-2.5 bg-emerald-800 hover:bg-emerald-900 text-white rounded-xl text-xs font-bold transition shadow-sm disabled:opacity-50"
+              >
+                <Save className="w-4 h-4" />
+                {isSaving ? 'Saving...' : 'Save Register'}
+              </button>
+            )}
           </div>
         </div>
 
@@ -697,6 +712,11 @@ export const MunshiDashboard: React.FC = () => {
             </table>
           </div>
         </div>
+      )}
+
+      {/* VIEW 3: FOOD REVIEWS & HOUSE CLEANLINESS REPORT */}
+      {viewMode === 'reviews' && (
+        <DailyReviewReport userRole="munshi" />
       )}
     </div>
   );

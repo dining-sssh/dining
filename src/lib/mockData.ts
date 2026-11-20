@@ -1,4 +1,4 @@
-import { Student, DiningDailyRecord, MonthlyBill, RebateRequest, MessSettings } from '@/types';
+import { Student, DiningDailyRecord, MonthlyBill, RebateRequest, MessSettings, FoodReview } from '@/types';
 
 export const INITIAL_SETTINGS: MessSettings = {
   session: '2026-2027',
@@ -254,5 +254,205 @@ export const INITIAL_REBATES: RebateRequest[] = [
     reason: 'Campus placement interview round in Gurgaon',
     status: 'pending',
     created_at: '2026-11-20'
+  }
+];
+
+export const INITIAL_REVIEWS: FoodReview[] = [
+  // Today's reviews (2026-11-20)
+  {
+    id: 'rev-20261120-1',
+    student_id: 's-1',
+    student_name: 'Tariq Anwar',
+    enrollment_no: 'GJ1021',
+    date: '2026-11-20',
+    meal_type: 'lunch',
+    quality_rating: 5,
+    quantity_rating: 4,
+    taste_rating: 5,
+    cleanliness_rating: 5,
+    cleanliness_house: 'HM',
+    overall_rating: 4.8,
+    comments: 'Lunch dal makhani and tandoori roti were fresh and very tasty. HM hostel dining tables were properly sanitized.',
+    created_at: '2026-11-20T13:45:00.000Z'
+  },
+  {
+    id: 'rev-20261120-2',
+    student_id: 's-2',
+    student_name: 'Zaid Farooqui',
+    enrollment_no: 'GJ1045',
+    date: '2026-11-20',
+    meal_type: 'lunch',
+    quality_rating: 4,
+    quantity_rating: 4,
+    taste_rating: 4,
+    cleanliness_rating: 4,
+    cleanliness_house: 'BH',
+    overall_rating: 4.0,
+    comments: 'Good food quality today. Bhopal house water dispenser area was clean and well kept.',
+    created_at: '2026-11-20T14:10:00.000Z'
+  },
+  {
+    id: 'rev-20261120-3',
+    student_id: 's-3',
+    student_name: 'Saad Qureshi',
+    enrollment_no: 'GK2219',
+    date: '2026-11-20',
+    meal_type: 'lunch',
+    quality_rating: 4,
+    quantity_rating: 5,
+    taste_rating: 3,
+    cleanliness_rating: 4,
+    cleanliness_house: 'QH',
+    overall_rating: 4.0,
+    comments: 'Serving quantity was generous. Qidwai hostel dining corridor was tidy.',
+    created_at: '2026-11-20T14:25:00.000Z'
+  },
+  {
+    id: 'rev-20261120-4',
+    student_id: 's-5',
+    student_name: 'Arham Siddiqui',
+    enrollment_no: 'GM5501',
+    date: '2026-11-20',
+    meal_type: 'lunch',
+    quality_rating: 5,
+    quantity_rating: 4,
+    taste_rating: 4,
+    cleanliness_rating: 4,
+    cleanliness_house: 'AK',
+    overall_rating: 4.3,
+    comments: 'Quality has improved significantly. Agha Khan wing tables were wiped down promptly.',
+    created_at: '2026-11-20T14:30:00.000Z'
+  },
+  {
+    id: 'rev-20261120-5',
+    student_id: 's-6',
+    student_name: 'Bilal Masood',
+    enrollment_no: 'GN6782',
+    date: '2026-11-20',
+    meal_type: 'lunch',
+    quality_rating: 3,
+    quantity_rating: 4,
+    taste_rating: 3,
+    cleanliness_rating: 3,
+    cleanliness_house: 'MB',
+    overall_rating: 3.3,
+    comments: 'Mahamoodabad wash basin area needs regular mopping after peak lunch hour.',
+    created_at: '2026-11-20T14:40:00.000Z'
+  },
+  {
+    id: 'rev-20261120-6',
+    student_id: 's-7',
+    student_name: 'Owais Khan',
+    enrollment_no: 'GJ1088',
+    date: '2026-11-20',
+    meal_type: 'lunch',
+    quality_rating: 5,
+    quantity_rating: 5,
+    taste_rating: 5,
+    cleanliness_rating: 5,
+    cleanliness_house: 'HM',
+    overall_rating: 5.0,
+    comments: 'Excellent food and HM hostel dining section is spotless.',
+    created_at: '2026-11-20T15:00:00.000Z'
+  },
+
+  // Yesterday's reviews (2026-11-19)
+  {
+    id: 'rev-20261119-1',
+    student_id: 's-1',
+    student_name: 'Tariq Anwar',
+    enrollment_no: 'GJ1021',
+    date: '2026-11-19',
+    meal_type: 'dinner',
+    quality_rating: 4,
+    quantity_rating: 4,
+    taste_rating: 4,
+    cleanliness_rating: 5,
+    cleanliness_house: 'HM',
+    overall_rating: 4.3,
+    comments: 'Special Thursday dinner was well made. Clean cutlery and plates.',
+    created_at: '2026-11-19T21:15:00.000Z'
+  },
+  {
+    id: 'rev-20261119-2',
+    student_id: 's-3',
+    student_name: 'Saad Qureshi',
+    enrollment_no: 'GK2219',
+    date: '2026-11-19',
+    meal_type: 'dinner',
+    quality_rating: 5,
+    quantity_rating: 5,
+    taste_rating: 4,
+    cleanliness_rating: 4,
+    cleanliness_house: 'QH',
+    overall_rating: 4.5,
+    comments: 'Dinner chicken qorma was delicious. QH hostel plates were very clean.',
+    created_at: '2026-11-19T21:30:00.000Z'
+  },
+  {
+    id: 'rev-20261119-3',
+    student_id: 's-4',
+    student_name: 'Hamza Rizvi',
+    enrollment_no: 'GL3412',
+    date: '2026-11-19',
+    meal_type: 'dinner',
+    quality_rating: 4,
+    quantity_rating: 4,
+    taste_rating: 4,
+    cleanliness_rating: 4,
+    cleanliness_house: 'KH',
+    overall_rating: 4.0,
+    comments: 'Kashmir house dining table area clean, food served warm.',
+    created_at: '2026-11-19T21:40:00.000Z'
+  },
+  {
+    id: 'rev-20261119-4',
+    student_id: 's-8',
+    student_name: 'Danish Ali',
+    enrollment_no: 'GK2254',
+    date: '2026-11-19',
+    meal_type: 'dinner',
+    quality_rating: 4,
+    quantity_rating: 3,
+    taste_rating: 4,
+    cleanliness_rating: 4,
+    cleanliness_house: 'BH',
+    overall_rating: 3.8,
+    comments: 'Good taste, please ensure roti stays hot during winter evenings.',
+    created_at: '2026-11-19T22:00:00.000Z'
+  },
+
+  // 2026-11-18 reviews
+  {
+    id: 'rev-20261118-1',
+    student_id: 's-2',
+    student_name: 'Zaid Farooqui',
+    enrollment_no: 'GJ1045',
+    date: '2026-11-18',
+    meal_type: 'dinner',
+    quality_rating: 4,
+    quantity_rating: 4,
+    taste_rating: 4,
+    cleanliness_rating: 4,
+    cleanliness_house: 'BH',
+    overall_rating: 4.0,
+    comments: 'Clean environment and wholesome meal.',
+    created_at: '2026-11-18T21:20:00.000Z'
+  },
+  {
+    id: 'rev-20261118-2',
+    student_id: 's-7',
+    student_name: 'Owais Khan',
+    enrollment_no: 'GJ1088',
+    date: '2026-11-18',
+    meal_type: 'dinner',
+    quality_rating: 5,
+    quantity_rating: 5,
+    taste_rating: 4,
+    cleanliness_rating: 5,
+    cleanliness_house: 'HM',
+    overall_rating: 4.8,
+    comments: 'HM hostel cleaness maintained very well by the staff.',
+    created_at: '2026-11-18T21:35:00.000Z'
   }
 ];
