@@ -1,0 +1,78 @@
+I am updating an existing Hostel Dining Management System web application with three role-based panels: **Student**, **Munshi**, and **Provost**. Please review my current codebase and implement the following feature updates, business logic rules, UI refinements, and bug fixes across the frontend and backend.
+
+---
+
+### 1. Global & System-Wide Rules
+* **Academic Session Cycle:** Configure the system's academic session cycle to run from **August to May**.
+* **Per-Day Deficit Formula:** Standardize the daily dining/deficit rate calculation across all modules to:
+  $$\text{Daily Rate} = \frac{1400}{30} \approx 46.67$$
+* **Authentication Bug Fix:** Fix the bug where logging out triggers an error screen/state instead of cleanly redirecting to the login page.
+
+---
+
+### 2. Student Panel Updates
+* **Dining Off / On Management:**
+  * In the **"Dining Off"** section, **remove the "End Date" input field**. Students will only specify a start date (or immediate off) to close dining continuously until reopened.
+  * When a student's dining status is `OFF`, display a **"Request to Open Dining" (Chalu Request)** button alongside the existing close-dining workflow so they can request reactivation.
+* **Zero-Balance Grace Period & Notifications:**
+  * Trigger continuous/automated notifications to students whenever their dining balance runs out (`0` days left).
+  * Allow students to continue eating for up to **3 grace days** after hitting zero balance, displaying their balance in negative days (down to **`-3`**).
+* **Deficit Calendar & List View:**
+  * Update the student attendance/dining calendar so hovering or tapping on any date displays the **deficit amount incurred on that specific day**.
+  * Add a separate **Deficit List View** so students can also view their daily deficits in a structured tabular/list format.
+* **Dining Menu & Timings:**
+  * Display the **Dining Menu** and **Dining Timings** published by the Munshi directly on the student dashboard.
+
+---
+
+### 3. Munshi Panel Updates
+* **UI Cleanup (Remove Student View):**
+  * Remove the **"View as Student"** option from the Munshi panel.
+* **Students Section & Directory:**
+  * Display a live active dining counter at the top of the Students section (e.g., **`88 / 200 Active Dining`**).
+  * Add a **Print List** feature for both **Active Students** and **Inactive Students**, ensuring both printable lists use the exact same table layout and column formatting.
+  * In the **Add Student** form:
+    * Add a **Remarks** text field.
+    * Add a dropdown for **All 7 Hostels**: `HM`, `JK`, `MB`, `KH`, `BH`, `QH`, `AK`.
+    * Add a **Previous Hostel / House** field.
+  * Add an **Edit Email** option in student details so the Munshi can correct mistyped student email addresses.
+* **Close / Restart Dining Controls:**
+  * Replace/supplement the full student list in the **Close Dining** section with a direct **Search by Enrollment Number** input.
+  * **Remove the Date Range option** for closing dining.
+  * **Remove all date restrictions** for the Munshi so they can close dining for past/previous dates (e.g., more than 1 day prior) as well as current/future dates.
+  * Add a **"Restart Dining"** button/option so the Munshi can manually reactivate a student's dining.
+  * Ensure the **Dining Off / On Request Panel** handles incoming student requests cleanly.
+* **Deficit (Per-Day) Menu & Cut Slip Logic:**
+  * Add a dedicated **Deficit (Per-Day) Menu/View** showing daily deficit accruals using the `1400 / 30` formula.
+  * In the **Cut Slip -> Amount Fill** section:
+    * Allow selecting **specific past month(s)** whose pending deficit should be included (e.g., checkboxes/tags like `Nov: 665`, `Sep: 540`) alongside mandatory deduction of any negative (`-ve`) grace days eaten.
+    * Automatically calculate and display the resulting **"Total Days Left"** based on the paid amount minus selected pending deficits and negative days (`1400 / 30` per day).
+* **Dining Ledger & Deficit Details:**
+  * Make the **Dining Ledger** completely **read-only (non-editable)**, retaining only the **Search by Enrollment Number** functionality.
+  * Display the student's **Total Pending Deficit** clearly in the ledger.
+  * In **Eaten Details**, make each month clickable so clicking a month expands/shows the **per-day deficit breakdown** for that month.
+  * In **Deficit Details**, display the **Total Monthly Deficit Amount** for each month.
+* **Food Cleanliness & Menu Management:**
+  * In the **Food Cleanliness** section, **remove the ability for the Munshi to submit ratings**; the Munshi should only view the **Overall Rating** submitted by students.
+  * Add interfaces for the Munshi to **Add/Update Dining Menu** and **Set Dining Timings** (which sync directly to the Student panel).
+
+---
+
+### 4. Provost Panel Updates
+* **Financial Overview:**
+  * Display aggregate financial metrics across all students on the Provost dashboard: **Total Pending Amount** and **Total Received Amount**.
+* **Extended Grace Period Approval (Beyond -3 Days):**
+  * Once a student exhausts their `-3` negative grace days, grant **exclusive permission to the Provost** to approve an extension beyond `-3` days without immediately reopening standard dining.
+  * When approved by the Provost, automatically send an **activation/extension request to the Munshi** so the Munshi can execute the dining extension on their end.
+* **UI & Access Cleanup:**
+  * **Remove Rebate** management from the Provost panel (restrict Rebate visibility/control strictly to the **Munshi** panel).
+  * **Remove Billing** from the Provost panel.
+  * **Remove Rate & Policy** from the Provost panel.
+  * **Remove "Student View"** from the Provost panel.
+
+---
+
+### Implementation Instructions
+1. Inspect my current project structure, database schema, and state management first.
+2. Propose any necessary database schema/API updates (e.g., negative balance tracking, hostel fields, remarks, month-wise deficit flags, Provost-to-Munshi extension requests) and then implement all changes step-by-step across the backend and frontend.
+3.

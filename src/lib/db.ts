@@ -1,11 +1,13 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import {
-  DiningDailyRecord,
+  DeficitEntry,
+  DiningRequest,
+  DiningTiming,
   FoodReview,
+  GraceExtension,
+  MenuItem,
   MessSettings,
-  MonthlyBill,
   PaymentSlip,
-  RebateRequest,
   Student
 } from '@/types';
 import { supabase } from './supabaseClient';
@@ -40,20 +42,33 @@ async function fetchAll<T>(table: string, build: (q: any) => any): Promise<T[]> 
   return out;
 }
 
+/** Blank database fields come back as null; the app uses undefined. */
+const clean = <T extends object>(row: T): T =>
+  Object.fromEntries(Object.entries(row).map(([k, v]) => [k, v === null ? undefined : v])) as T;
+
 /* ------------------------------ students ------------------------------ */
 
-export const listStudents = (): Promise<Student[]> =>
-  fetchAll<Student>('students', (q) => q.order('room_no').order('id'));
+export async function listStudents(): Promise<Student[]> {
+  const rows = await fetchAll<Student>('students', (q) => q.order('room_no').order('id'));
+  return rows.map(clean);
+}
+
+const studentRow = (r: Partial<Student>) => ({
+  ...r,
+  ...(r.enrollment_no ? { enrollment_no: r.enrollment_no.trim().toUpperCase() } : {}),
+  ...(r.email ? { email: r.email.trim().toLowerCase() } : {})
+});
 
 export async function insertStudents(rows: Array<Omit<Student, 'id'>>): Promise<Student[]> {
-  const clean = rows.map((r) => ({
-    ...r,
-    enrollment_no: r.enrollment_no.trim().toUpperCase(),
-    email: r.email.trim().toLowerCase()
-  }));
-  const { data, error } = await client().from('students').insert(clean).select();
+  const { data, error } = await client().from('students').insert(rows.map(studentRow)).select();
   fail(error);
-  return (data ?? []) as Student[];
+  return ((data ?? []) as Student[]).map(clean);
+}
+
+export async function patchStudent(id: string, patch: Partial<Student>): Promise<Student> {
+  const { data, error } = await client().from('students').update(studentRow(patch)).eq('id', id).select().single();
+  fail(error);
+  return clean(data as Student);
 }
 
 export async function removeStudent(id: string): Promise<void> {
@@ -61,64 +76,40 @@ export async function removeStudent(id: string): Promise<void> {
   fail(error);
 }
 
-/* ------------------------- day-wise dining register ------------------------- */
+/* ---------------------- dining on / off requests ---------------------- */
 
-export const listRecords = (opts: { studentId?: string; date?: string } = {}): Promise<DiningDailyRecord[]> =>
-  fetchAll<DiningDailyRecord>('dining_daily_records', (q) => {
-    let query = q;
-    if (opts.studentId) query = query.eq('student_id', opts.studentId);
-    if (opts.date) query = query.eq('date', opts.date);
-    return query.order('date').order('id');
-  });
-
-export async function upsertRecords(rows: DiningDailyRecord[]): Promise<void> {
-  if (rows.length === 0) return;
-  const now = new Date().toISOString();
-  const clean = rows.map((r) => {
-    const eaten = r.eaten ?? Boolean(r.lunch || r.dinner);
-    return {
-      id: r.id,
-      student_id: r.student_id,
-      enrollment_no: r.enrollment_no,
-      date: r.date,
-      eaten,
-      lunch: r.lunch ?? eaten,
-      dinner: r.dinner ?? eaten,
-      is_rebate: r.is_rebate,
-      rebate_reason: r.rebate_reason ?? null,
-      guest_diets: r.guest_diets || 0,
-      marked_by: r.marked_by ?? null,
-      updated_at: now
-    };
-  });
-  // Insert in chunks so a long closure (hundreds of days) stays inside request limits.
-  for (let i = 0; i < clean.length; i += 500) {
-    const { error } = await client()
-      .from('dining_daily_records')
-      .upsert(clean.slice(i, i + 500), { onConflict: 'student_id,date' });
-    fail(error);
-  }
+export async function listRequests(): Promise<DiningRequest[]> {
+  const rows = await fetchAll<DiningRequest>('rebate_requests', (q) =>
+    q.order('created_at', { ascending: false }).order('id')
+  );
+  return rows.map(clean);
 }
 
-/* -------------------------------- bills -------------------------------- */
-
-export const listBills = (opts: { enrollmentNo?: string; session?: string } = {}): Promise<MonthlyBill[]> =>
-  fetchAll<MonthlyBill>('monthly_bills', (q) => {
-    let query = q;
-    if (opts.enrollmentNo) query = query.eq('enrollment_no', opts.enrollmentNo.trim().toUpperCase());
-    if (opts.session) query = query.eq('session', opts.session);
-    return query.order('month_key').order('id');
-  });
-
-export async function generateBills(monthKey: string): Promise<number> {
-  const { data, error } = await client().rpc('generate_monthly_bills', { p_month: monthKey });
+export async function insertRequest(
+  row: Omit<DiningRequest, 'id' | 'created_at' | 'status' | 'reviewed_at'> & { status?: DiningRequest['status'] }
+): Promise<DiningRequest> {
+  const payload = { ...row, ...(row.status === 'approved' ? { reviewed_at: new Date().toISOString() } : {}) };
+  const { data, error } = await client().from('rebate_requests').insert(payload).select().single();
   fail(error);
-  return Number(data ?? 0);
+  return clean(data as DiningRequest);
+}
+
+export async function setRequestStatus(id: string, status: 'approved' | 'rejected'): Promise<void> {
+  const { error } = await client()
+    .from('rebate_requests')
+    .update({ status, reviewed_at: new Date().toISOString() })
+    .eq('id', id);
+  fail(error);
 }
 
 /* --------------------------------- slips --------------------------------- */
 
-const toSlip = (row: any): PaymentSlip => ({ ...row, breakup: row.breakup ?? undefined, cashier: row.cashier ?? undefined });
+const toSlip = (row: any): PaymentSlip => ({
+  ...clean(row),
+  amount: Number(row.amount),
+  breakup: row.breakup ?? undefined,
+  settled_months: row.settled_months ?? undefined
+});
 
 export async function listSlips(opts: { enrollmentNo?: string } = {}): Promise<PaymentSlip[]> {
   const rows = await fetchAll<any>('payment_slips', (q) => {
@@ -132,7 +123,12 @@ export async function listSlips(opts: { enrollmentNo?: string } = {}): Promise<P
 export async function insertSlip(slip: Omit<PaymentSlip, 'id'>): Promise<PaymentSlip> {
   const { data, error } = await client()
     .from('payment_slips')
-    .insert({ ...slip, breakup: slip.breakup ?? null, cashier: slip.cashier ?? null })
+    .insert({
+      ...slip,
+      breakup: slip.breakup ?? null,
+      settled_months: slip.settled_months?.length ? slip.settled_months : null,
+      cashier: slip.cashier ?? null
+    })
     .select()
     .single();
   if (error) {
@@ -142,24 +138,74 @@ export async function insertSlip(slip: Omit<PaymentSlip, 'id'>): Promise<Payment
   return toSlip(data);
 }
 
-/* -------------------------------- rebates -------------------------------- */
+/* -------------------------- carried deficits -------------------------- */
 
-export const listRebates = (): Promise<RebateRequest[]> =>
-  fetchAll<RebateRequest>('rebate_requests', (q) => q.order('created_at', { ascending: false }).order('id'));
+const toEntry = (row: any): DeficitEntry => ({ ...clean(row), amount: Number(row.amount) });
 
-export async function insertRebate(
-  row: Omit<RebateRequest, 'id' | 'created_at' | 'status'> & { status?: RebateRequest['status'] }
-): Promise<RebateRequest> {
-  const { data, error } = await client().from('rebate_requests').insert(row).select().single();
-  fail(error);
-  return data as RebateRequest;
+export async function listEntries(): Promise<DeficitEntry[]> {
+  const rows = await fetchAll<any>('deficit_entries', (q) => q.order('month_key').order('id'));
+  return rows.map(toEntry);
 }
 
-export async function setRebateStatus(id: string, status: 'approved' | 'rejected'): Promise<void> {
+export async function insertEntry(row: Omit<DeficitEntry, 'id' | 'created_at'>): Promise<DeficitEntry> {
+  const { data, error } = await client().from('deficit_entries').insert(row).select().single();
+  fail(error);
+  return toEntry(data);
+}
+
+/* ---------------------------- grace extensions ---------------------------- */
+
+export async function listExtensions(): Promise<GraceExtension[]> {
+  const rows = await fetchAll<GraceExtension>('grace_extensions', (q) =>
+    q.order('created_at', { ascending: false }).order('id')
+  );
+  return rows.map(clean);
+}
+
+export async function insertExtension(
+  row: Omit<GraceExtension, 'id' | 'created_at' | 'status' | 'applied_at'>
+): Promise<GraceExtension> {
+  const { data, error } = await client().from('grace_extensions').insert(row).select().single();
+  fail(error);
+  return clean(data as GraceExtension);
+}
+
+export async function setExtensionStatus(id: string, status: 'applied' | 'cancelled', appliedOn?: string): Promise<void> {
   const { error } = await client()
-    .from('rebate_requests')
-    .update({ status, reviewed_at: new Date().toISOString() })
+    .from('grace_extensions')
+    .update({ status, applied_at: status === 'applied' ? appliedOn ?? null : null })
     .eq('id', id);
+  fail(error);
+}
+
+/* ----------------------------- menu and timings ----------------------------- */
+
+export async function listMenu(): Promise<MenuItem[]> {
+  const { data, error } = await client().from('dining_menu').select('weekday, meal, items');
+  fail(error);
+  return (data ?? []) as MenuItem[];
+}
+
+export async function saveMenu(items: MenuItem[]): Promise<void> {
+  const rows = items.map((i) => ({ ...i, updated_at: new Date().toISOString() }));
+  const { error } = await client().from('dining_menu').upsert(rows, { onConflict: 'weekday,meal' });
+  fail(error);
+}
+
+export async function listTimings(): Promise<DiningTiming[]> {
+  const { data, error } = await client().from('dining_timings').select('meal, start_time, end_time');
+  fail(error);
+  // Postgres "time" values come back as 12:30:00; the app uses 12:30.
+  return ((data ?? []) as DiningTiming[]).map((t) => ({
+    ...t,
+    start_time: String(t.start_time).slice(0, 5),
+    end_time: String(t.end_time).slice(0, 5)
+  }));
+}
+
+export async function saveTimings(timings: DiningTiming[]): Promise<void> {
+  const rows = timings.map((t) => ({ ...t, updated_at: new Date().toISOString() }));
+  const { error } = await client().from('dining_timings').upsert(rows, { onConflict: 'meal' });
   fail(error);
 }
 
@@ -176,22 +222,17 @@ export async function getSettings(): Promise<MessSettings | null> {
   return (data as MessSettings | null) ?? null;
 }
 
-export async function saveSettings(s: MessSettings): Promise<void> {
-  const { error } = await client()
-    .from('mess_settings')
-    .upsert({ ...s, updated_at: new Date().toISOString() }, { onConflict: 'session' });
-  fail(error);
-}
-
 /* -------------------------------- reviews -------------------------------- */
 
-export const listReviews = (): Promise<FoodReview[]> =>
-  fetchAll<FoodReview>('food_reviews', (q) => q.order('created_at', { ascending: false }).order('id'));
+export async function listReviews(): Promise<FoodReview[]> {
+  const rows = await fetchAll<any>('food_reviews', (q) => q.order('created_at', { ascending: false }).order('id'));
+  return rows.map((r) => ({ ...clean(r), overall_rating: Number(r.overall_rating) }));
+}
 
 export async function insertReview(review: Omit<FoodReview, 'id' | 'created_at'>): Promise<FoodReview> {
   const { data, error } = await client().from('food_reviews').insert(review).select().single();
   fail(error);
-  return data as FoodReview;
+  return clean(data as FoodReview);
 }
 
 /* ---------------------------------- staff ---------------------------------- */

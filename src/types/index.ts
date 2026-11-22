@@ -1,4 +1,4 @@
-export type HostelHouseCode = 'HM' | 'BH' | 'QH' | 'KH' | 'AK' | 'MB';
+export type HostelHouseCode = 'HM' | 'JK' | 'MB' | 'KH' | 'BH' | 'QH' | 'AK';
 
 export interface HostelHouseInfo {
   code: HostelHouseCode;
@@ -14,6 +14,24 @@ export const HOSTEL_HOUSES: Record<HostelHouseCode, HostelHouseInfo> = {
     shortName: 'Hasrat Mohani',
     color: 'bg-emerald-100 text-emerald-800 border-emerald-300'
   },
+  JK: {
+    code: 'JK',
+    name: 'JK hostel',
+    shortName: 'JK Hostel',
+    color: 'bg-cyan-100 text-cyan-800 border-cyan-300'
+  },
+  MB: {
+    code: 'MB',
+    name: 'Mahamoodabad house',
+    shortName: 'Mahamoodabad',
+    color: 'bg-indigo-100 text-indigo-800 border-indigo-300'
+  },
+  KH: {
+    code: 'KH',
+    name: 'Kashmir house',
+    shortName: 'Kashmir House',
+    color: 'bg-purple-100 text-purple-800 border-purple-300'
+  },
   BH: {
     code: 'BH',
     name: 'Bhopal house',
@@ -26,25 +44,16 @@ export const HOSTEL_HOUSES: Record<HostelHouseCode, HostelHouseInfo> = {
     shortName: 'Qidwai Hostel',
     color: 'bg-amber-100 text-amber-800 border-amber-300'
   },
-  KH: {
-    code: 'KH',
-    name: 'Kashmir house',
-    shortName: 'Kashmir House',
-    color: 'bg-purple-100 text-purple-800 border-purple-300'
-  },
   AK: {
     code: 'AK',
     name: 'Agha khan house',
     shortName: 'Agha Khan',
     color: 'bg-rose-100 text-rose-800 border-rose-300'
-  },
-  MB: {
-    code: 'MB',
-    name: 'Mahamoodabad house',
-    shortName: 'Mahamoodabad',
-    color: 'bg-indigo-100 text-indigo-800 border-indigo-300'
   }
 };
+
+/** All seven hostels in the order they are listed in the forms. */
+export const HOUSE_CODES: HostelHouseCode[] = ['HM', 'JK', 'MB', 'KH', 'BH', 'QH', 'AK'];
 
 export type UserRole = 'provost' | 'munshi' | 'student';
 
@@ -69,45 +78,44 @@ export interface Student {
   course: string;
   email: string;
   previous_room?: string;
+  /** Hostel / house the student lived in before (free text, usually a house code). */
+  previous_house?: string;
+  remarks?: string;
   phone?: string;
   session: string;
   status: 'active' | 'suspended' | 'passed_out';
+  /** First day dining counts for this student (YYYY-MM-DD). */
+  dining_from?: string;
   created_at?: string;
 }
 
-export interface DiningDailyRecord {
+/**
+ * A request to switch a student's dining off or back on, from `start_date` onwards.
+ * Dining stays off until an approved 'on' request restarts it.
+ * (Stored in the `rebate_requests` table.)
+ */
+export interface DiningRequest {
   id: string;
   student_id: string;
   enrollment_no: string;
-  date: string; // YYYY-MM-DD
-  eaten?: boolean; // Whole day dining status: Eaten or Not Eaten
-  lunch?: boolean;
-  dinner?: boolean;
-  is_rebate: boolean;
-  rebate_reason?: string;
-  guest_diets: number;
-  marked_by?: string;
-  updated_at?: string;
+  student_name: string;
+  kind: 'off' | 'on';
+  start_date: string;
+  reason: string;
+  status: 'pending' | 'approved' | 'rejected';
+  created_at: string;
+  reviewed_at?: string | null;
 }
 
-export interface MonthlyBill {
+/** A deficit carried from earlier books (a month and an amount) that is still to be paid. */
+export interface DeficitEntry {
   id: string;
   student_id: string;
   enrollment_no: string;
-  session: string;
-  month_name: string; // e.g. "November 2026"
-  month_key: string;  // e.g. "2026-11"
-  total_diets: number;
-  rebate_days: number;
-  diet_rate: number;
-  diet_amount: number;
-  fixed_charges: number;
-  establishment_charges: number;
-  extras: number;
-  total_amount: number;
-  status: 'paid' | 'pending' | 'overdue';
-  payment_date?: string;
-  receipt_no?: string;
+  month_key: string; // 'YYYY-MM'
+  amount: number;
+  note?: string | null;
+  created_at: string;
 }
 
 /** A "Food Charges Slip": one deposit made by a student at the dining office. */
@@ -116,23 +124,42 @@ export interface PaymentSlip {
   student_id: string;
   enrollment_no: string;
   book_no: string;
-  slip_no: string; // printed as "R. No." on the slip
+  slip_no: string; // printed as "R. No."
   amount: number;
   breakup?: number[]; // e.g. [1600, 1400] is written as "1600 + 1400 = 3000/-"
+  /** Months of carried deficit (DeficitEntry) that this payment clears. */
+  settled_months?: string[];
   paid_on: string; // YYYY-MM-DD
   cashier?: string;
 }
 
-export interface RebateRequest {
+/** Provost's approval to keep dining beyond the normal -3 day limit. The Munshi applies it. */
+export interface GraceExtension {
   id: string;
   student_id: string;
   enrollment_no: string;
   student_name: string;
-  start_date: string;
-  end_date: string;
-  reason: string;
-  status: 'pending' | 'approved' | 'rejected';
+  extra_days: number;
+  note?: string | null;
+  status: 'awaiting_munshi' | 'applied' | 'cancelled';
+  approved_by?: string | null;
   created_at: string;
+  applied_at?: string | null; // date the Munshi applied it (YYYY-MM-DD)
+}
+
+export type MealType = 'breakfast' | 'lunch' | 'dinner';
+
+/** What is served on one weekday (0 = Sunday ... 6 = Saturday) for one meal. */
+export interface MenuItem {
+  weekday: number;
+  meal: MealType;
+  items: string;
+}
+
+export interface DiningTiming {
+  meal: MealType;
+  start_time: string; // '12:30'
+  end_time: string; // '14:30'
 }
 
 export interface MessSettings {

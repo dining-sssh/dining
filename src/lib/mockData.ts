@@ -1,15 +1,32 @@
-import { Student, DiningDailyRecord, MonthlyBill, PaymentSlip, RebateRequest, MessSettings, FoodReview } from '@/types';
+import {
+  DeficitEntry,
+  DiningRequest,
+  DiningTiming,
+  FoodReview,
+  GraceExtension,
+  MenuItem,
+  MessSettings,
+  PaymentSlip,
+  Student
+} from '@/types';
+
+/**
+ * Demo data, used only while no Supabase keys are set. It is tuned for a "today" around
+ * 20 November 2026, but everything is calculated from it, so any date works.
+ */
 
 export const INITIAL_SETTINGS: MessSettings = {
   session: '2026-2027',
-  diet_rate: 65,
-  fixed_charges: 500,
-  establishment_charges: 350,
+  diet_rate: 1400 / 30,
+  fixed_charges: 0,
+  establishment_charges: 0,
   provost_name: 'Prof. Zameeruddin Khan',
   munshi_name: 'Janab Ashfaq Ahmad (Sr. Munshi)',
-  hall_name: 'Sir Syed Hall (South) Dining Hall',
-  min_rebate_days: 3
+  hall_name: 'Sir Shah Sulaiman Hall',
+  min_rebate_days: 0
 };
+
+const START = '2026-08-01';
 
 export const INITIAL_STUDENTS: Student[] = [
   {
@@ -21,9 +38,11 @@ export const INITIAL_STUDENTS: Student[] = [
     course: 'B.TECH.',
     email: 'gl8373@myamu.ac.in',
     previous_room: 'H.M. A08',
+    previous_house: 'HM',
     phone: '+91 9876543200',
     session: '2025-2026',
-    status: 'active'
+    status: 'active',
+    dining_from: START
   },
   {
     id: 's-1',
@@ -34,9 +53,11 @@ export const INITIAL_STUDENTS: Student[] = [
     course: 'B.Tech (Computer Engg)',
     email: 'tariq.anwar@myamu.ac.in',
     previous_room: '08',
+    previous_house: 'HM',
     phone: '+91 9876543210',
     session: '2026-2027',
-    status: 'active'
+    status: 'active',
+    dining_from: START
   },
   {
     id: 's-2',
@@ -47,9 +68,11 @@ export const INITIAL_STUDENTS: Student[] = [
     course: 'MCA',
     email: 'zaid.farooqui@myamu.ac.in',
     previous_room: '15',
+    previous_house: 'BH',
     phone: '+91 9876543211',
     session: '2026-2027',
-    status: 'active'
+    status: 'active',
+    dining_from: START
   },
   {
     id: 's-3',
@@ -62,7 +85,8 @@ export const INITIAL_STUDENTS: Student[] = [
     previous_room: 'New Allotment',
     phone: '+91 9876543212',
     session: '2026-2027',
-    status: 'active'
+    status: 'active',
+    dining_from: START
   },
   {
     id: 's-4',
@@ -73,9 +97,11 @@ export const INITIAL_STUDENTS: Student[] = [
     course: 'MBBS',
     email: 'hamza.rizvi@myamu.ac.in',
     previous_room: '19',
+    previous_house: 'KH',
     phone: '+91 9876543213',
     session: '2026-2027',
-    status: 'active'
+    status: 'active',
+    dining_from: START
   },
   {
     id: 's-5',
@@ -86,9 +112,11 @@ export const INITIAL_STUDENTS: Student[] = [
     course: 'B.A. (English Hons)',
     email: 'arham.siddiqui@myamu.ac.in',
     previous_room: '03',
+    previous_house: 'AK',
     phone: '+91 9876543214',
     session: '2026-2027',
-    status: 'active'
+    status: 'active',
+    dining_from: START
   },
   {
     id: 's-6',
@@ -99,22 +127,26 @@ export const INITIAL_STUDENTS: Student[] = [
     course: 'B.Com (Hons)',
     email: 'bilal.masood@myamu.ac.in',
     previous_room: '33',
+    previous_house: 'JK',
     phone: '+91 9876543215',
     session: '2026-2027',
-    status: 'active'
+    status: 'active',
+    dining_from: START
   },
   {
     id: 's-7',
     enrollment_no: 'GJ1088',
     name: 'Owais Khan',
-    house: 'HM',
+    house: 'JK',
     room_no: '18',
     course: 'B.Tech (Mechanical)',
     email: 'owais.khan@myamu.ac.in',
     previous_room: '04',
+    previous_house: 'HM',
     phone: '+91 9876543216',
     session: '2026-2027',
-    status: 'active'
+    status: 'active',
+    dining_from: START
   },
   {
     id: 's-8',
@@ -127,7 +159,8 @@ export const INITIAL_STUDENTS: Student[] = [
     previous_room: 'New Allotment',
     phone: '+91 9876543217',
     session: '2026-2027',
-    status: 'active'
+    status: 'active',
+    dining_from: START
   },
   {
     id: 's-aarif',
@@ -138,211 +171,160 @@ export const INITIAL_STUDENTS: Student[] = [
     course: 'B.Tech',
     email: 'iamaakoji@gmail.com',
     previous_room: 'New Allotment',
+    previous_house: 'JK',
+    remarks: 'Demo student',
     session: '2026-2027',
-    status: 'active'
+    status: 'active',
+    dining_from: START
   }
 ];
 
-const pad2 = (n: number) => String(n).padStart(2, '0');
+/* ------------------------------ deposits (food charges slips) ------------------------------ */
 
-// Day-wise attendance for the current session: 1 July 2026 to 20 November 2026.
-export function generateInitialDailyRecords(students: Student[]): DiningDailyRecord[] {
-  const records: DiningDailyRecord[] = [];
-  const end = new Date(2026, 10, 20);
+// Different payment habits, so the demo shows every state: on time, prepaid, stopped, late, short payment.
+const PATTERNS: Array<Array<[string, number]>> = [
+  [['2026-08-01', 1400], ['2026-09-01', 1400], ['2026-10-01', 1400], ['2026-11-01', 1400]],
+  [['2026-08-01', 2800], ['2026-10-01', 1400], ['2026-11-01', 1400]],
+  [['2026-08-01', 1400], ['2026-09-01', 1400], ['2026-10-01', 1400]], // missed November: dining stops
+  [['2026-08-01', 1400], ['2026-09-01', 1400], ['2026-10-01', 1400], ['2026-11-15', 1400]],
+  [['2026-08-01', 700], ['2026-08-15', 700], ['2026-09-01', 1400], ['2026-10-01', 1400], ['2026-11-01', 1000]]
+];
 
-  for (let d = new Date(2026, 6, 1); d <= end; d.setDate(d.getDate() + 1)) {
-    const year = d.getFullYear();
-    const month = d.getMonth() + 1;
-    const day = d.getDate();
-    const dateStr = `${year}-${pad2(month)}-${pad2(day)}`;
-
-    students.forEach((student, index) => {
-      // Simulate realistic pattern: some students have rebates, some missed a day
-      const isRebate =
-        (student.enrollment_no === 'GL3412' && month === 11 && day >= 10 && day <= 13) ||
-        (student.enrollment_no === 'GM5501' && month === 11 && day >= 5 && day <= 8);
-
-      const isEaten = isRebate ? false : !((day + month + index) % 11 === 0);
-      const guestDiets = day === 15 && index === 0 ? 2 : 0;
-
-      records.push({
-        id: `rec-${student.id}-${dateStr}`,
+export function generateInitialSlips(students: Student[]): PaymentSlip[] {
+  const slips: PaymentSlip[] = [];
+  let counter = 0;
+  students.forEach((student, index) => {
+    PATTERNS[index % PATTERNS.length].forEach(([date, amount]) => {
+      counter += 1;
+      const first = Math.round((amount * 0.55) / 100) * 100;
+      slips.push({
+        id: `slip-${student.id}-${date}`,
         student_id: student.id,
         enrollment_no: student.enrollment_no,
-        date: dateStr,
-        eaten: isEaten,
-        lunch: isEaten,
-        dinner: isEaten,
-        is_rebate: isRebate,
-        rebate_reason: isRebate ? 'Home visit / Approved Leave' : undefined,
-        guest_diets: guestDiets,
-        marked_by: 'Munshi Ashfaq'
+        book_no: String(100 + Math.floor(counter / 50)),
+        slip_no: String(15000 + counter),
+        amount,
+        breakup: index % 2 === 0 && amount >= 1400 && first > 0 && first < amount ? [first, amount - first] : undefined,
+        paid_on: date,
+        cashier: 'Ashfaq Ahmad'
       });
     });
-  }
-
-  return records;
+  });
+  return slips;
 }
 
-const MONTH_NAMES = [
-  'January', 'February', 'March', 'April', 'May', 'June',
-  'July', 'August', 'September', 'October', 'November', 'December'
-];
+/* ------------------------- requests, carried deficits, extensions ------------------------- */
 
-/**
- * Monthly bills and the deposit slips that paid for them, generated together so the
- * numbers agree. Bills for 2026-27 are computed from the day-wise records above.
- * Students deposit round amounts, so a small deficit (or advance) carries forward.
- */
-export function generateInitialLedger(students: Student[]): { bills: MonthlyBill[]; slips: PaymentSlip[] } {
-  const records = generateInitialDailyRecords(students);
-  const monthStats = new Map<string, { eaten: number; guests: number; rebate: number }>();
-  records.forEach((r) => {
-    const key = `${r.student_id}_${r.date.slice(0, 7)}`;
-    const s = monthStats.get(key) ?? { eaten: 0, guests: 0, rebate: 0 };
-    if (r.is_rebate) s.rebate += 1;
-    else if (r.eaten) s.eaten += 1;
-    s.guests += r.guest_diets || 0;
-    monthStats.set(key, s);
-  });
+const request = (
+  id: string,
+  student: Student,
+  kind: DiningRequest['kind'],
+  start: string,
+  status: DiningRequest['status'],
+  reason: string,
+  created: string
+): DiningRequest => ({
+  id,
+  student_id: student.id,
+  enrollment_no: student.enrollment_no,
+  student_name: student.name,
+  kind,
+  start_date: start,
+  reason,
+  status,
+  created_at: created
+});
 
-  // Every month from July 2024 to November 2026, oldest first.
-  const months: Array<{ name: string; key: string; session: string; days: number }> = [];
-  let y = 2024;
-  let m = 7;
-  while (y < 2026 || (y === 2026 && m <= 11)) {
-    months.push({
-      name: `${MONTH_NAMES[m - 1]} ${y}`,
-      key: `${y}-${pad2(m)}`,
-      session: m >= 8 ? `${y}-${y + 1}` : `${y - 1}-${y}`,
-      days: new Date(y, m, 0).getDate()
-    });
-    m += 1;
-    if (m > 12) {
-      m = 1;
-      y += 1;
-    }
-  }
+export function generateInitialRequests(students: Student[]): DiningRequest[] {
+  const byId = (id: string) => students.find((s) => s.id === id);
+  const list: DiningRequest[] = [];
+  const add = (r: DiningRequest | null) => r && list.push(r);
+  const s = (id: string) => byId(id) ?? null;
 
-  const dietRate = INITIAL_SETTINGS.diet_rate;
-  const fixedCharges = INITIAL_SETTINGS.fixed_charges;
-  const establishmentCharges = INITIAL_SETTINGS.establishment_charges;
-  const bills: MonthlyBill[] = [];
-  const slips: PaymentSlip[] = [];
-  let slipCounter = 0;
+  const hamza = s('s-4');
+  const arham = s('s-5');
+  const saad = s('s-3');
+  const tariq = s('s-1');
+  const zaid = s('s-2');
 
-  students.forEach((student, sIdx) => {
-    let balance = 0; // charged minus paid so far
+  add(hamza && request('req-1', hamza, 'off', '2026-11-10', 'approved', 'Medical conference at AIIMS New Delhi', '2026-11-08'));
+  add(hamza && request('req-2', hamza, 'on', '2026-11-14', 'approved', 'Back at the hostel', '2026-11-13'));
+  add(arham && request('req-3', arham, 'off', '2026-11-05', 'approved', 'Home visit', '2026-11-03'));
+  add(arham && request('req-4', arham, 'on', '2026-11-09', 'approved', 'Back from home', '2026-11-08'));
+  add(saad && request('req-5', saad, 'off', '2026-11-16', 'approved', 'Family function at native place', '2026-11-15'));
+  add(saad && request('req-6', saad, 'on', '2026-11-22', 'pending', 'Returning on 22 November', '2026-11-20'));
+  add(tariq && request('req-7', tariq, 'off', '2026-11-26', 'pending', 'Family wedding leave', '2026-11-19'));
+  add(zaid && request('req-8', zaid, 'off', '2026-12-01', 'pending', 'Campus placement round in Gurgaon', '2026-11-20'));
+  return list;
+}
 
-    months.forEach((m) => {
-      const stats = monthStats.get(`${student.id}_${m.key}`);
-      const rebateDays = stats ? stats.rebate : sIdx % 2 === 0 ? 4 : 0;
-      const totalDiets = stats
-        ? stats.eaten + stats.guests
-        : Math.max(10, m.days - rebateDays - ((sIdx + 3) % 4));
-      const dietAmount = totalDiets * dietRate;
-      const totalAmount = dietAmount + fixedCharges + establishmentCharges;
+export function generateInitialEntries(students: Student[]): DeficitEntry[] {
+  const make = (id: string, studentId: string, month: string, amount: number, note: string): DeficitEntry | null => {
+    const st = students.find((x) => x.id === studentId);
+    return st
+      ? { id, student_id: st.id, enrollment_no: st.enrollment_no, month_key: month, amount, note, created_at: `${month}-28` }
+      : null;
+  };
+  return [
+    make('def-1', 's-aarif', '2026-09', 540, 'Carried from the old register'),
+    make('def-2', 's-aarif', '2026-10', 300, 'Carried from the old register'),
+    make('def-3', 's-1', '2026-09', 330, 'Carried from the old register')
+  ].filter((e): e is DeficitEntry => Boolean(e));
+}
 
-      const bill: MonthlyBill = {
-        id: `bill-${student.id}-${m.key}`,
-        student_id: student.id,
-        enrollment_no: student.enrollment_no,
-        session: m.session,
-        month_name: m.name,
-        month_key: m.key,
-        total_diets: totalDiets,
-        rebate_days: rebateDays,
-        diet_rate: dietRate,
-        diet_amount: dietAmount,
-        fixed_charges: fixedCharges,
-        establishment_charges: establishmentCharges,
-        extras: 0,
-        total_amount: totalAmount,
-        status: 'pending'
-      };
-
-      balance += totalAmount;
-
-      // The running month (November 2026) is not settled yet.
-      if (m.key < '2026-11') {
-        const pay = sIdx % 3 === 0 ? Math.floor(balance / 500) * 500 : Math.ceil(balance / 100) * 100;
-        if (pay > 0) {
-          slipCounter += 1;
-          let breakup: number[] | undefined;
-          if (sIdx % 2 === 0 && pay >= 2000) {
-            const first = Math.round((pay * 0.55) / 100) * 100;
-            if (first > 0 && first < pay) breakup = [first, pay - first];
-          }
-          const paidOn = `${m.key}-${pad2(Math.min(28, m.days))}`;
-          const slip: PaymentSlip = {
-            id: `slip-${student.id}-${m.key}`,
-            student_id: student.id,
-            enrollment_no: student.enrollment_no,
-            book_no: String(100 + Math.floor(slipCounter / 50)),
-            slip_no: String(15000 + slipCounter),
-            amount: pay,
-            breakup,
-            paid_on: paidOn,
-            cashier: 'Ashfaq Ahmad'
-          };
-          slips.push(slip);
-          bill.payment_date = paidOn;
-          bill.receipt_no = slip.slip_no;
-          balance -= pay;
+export function generateInitialExtensions(students: Student[]): GraceExtension[] {
+  const owais = students.find((s) => s.id === 's-7');
+  return owais
+    ? [
+        {
+          id: 'ext-1',
+          student_id: owais.id,
+          enrollment_no: owais.enrollment_no,
+          student_name: owais.name,
+          extra_days: 2,
+          note: 'Waiting for the scholarship amount',
+          status: 'awaiting_munshi',
+          approved_by: 'Provost',
+          created_at: '2026-11-19'
         }
-        bill.status = balance > 0 && m.key === '2026-10' ? 'overdue' : 'paid';
-      }
-
-      bills.push(bill);
-    });
-  });
-
-  return { bills, slips };
+      ]
+    : [];
 }
 
-export function generateInitialBills(students: Student[]): MonthlyBill[] {
-  return generateInitialLedger(students).bills;
-}
+/* ------------------------------------ menu and timings ------------------------------------ */
 
-export function generateInitialPayments(students: Student[]): PaymentSlip[] {
-  return generateInitialLedger(students).slips;
-}
-
-export const INITIAL_REBATES: RebateRequest[] = [
-  {
-    id: 'reb-1',
-    student_id: 's-4',
-    enrollment_no: 'GL3412',
-    student_name: 'Hamza Rizvi',
-    start_date: '2026-11-24',
-    end_date: '2026-11-28',
-    reason: 'Attending National Medical Conference at AIIMS New Delhi',
-    status: 'approved',
-    created_at: '2026-11-18'
-  },
-  {
-    id: 'reb-2',
-    student_id: 's-1',
-    enrollment_no: 'GJ1021',
-    student_name: 'Tariq Anwar',
-    start_date: '2026-11-26',
-    end_date: '2026-11-30',
-    reason: 'Family wedding leave at native place',
-    status: 'pending',
-    created_at: '2026-11-19'
-  },
-  {
-    id: 'reb-3',
-    student_id: 's-2',
-    enrollment_no: 'GJ1045',
-    student_name: 'Zaid Farooqui',
-    start_date: '2026-12-01',
-    end_date: '2026-12-05',
-    reason: 'Campus placement interview round in Gurgaon',
-    status: 'pending',
-    created_at: '2026-11-20'
-  }
+const WEEK_LUNCH = [
+  'Rice, Dal Tadka, Aloo Gobhi, Salad',
+  'Roti, Rajma, Jeera Rice, Raita',
+  'Roti, Mix Veg, Dal Fry, Rice',
+  'Roti, Chole, Rice, Onion Salad',
+  'Roti, Kadhi Pakoda, Rice, Papad',
+  'Roti, Aloo Matar, Dal, Rice',
+  'Biryani, Raita, Salad'
 ];
+const WEEK_DINNER = [
+  'Roti, Chicken Qorma, Rice, Kheer',
+  'Roti, Paneer Masala, Dal, Rice',
+  'Roti, Egg Curry / Mix Dal, Rice',
+  'Roti, Mutton Curry, Rice, Sweet',
+  'Roti, Aloo Baingan, Dal, Rice',
+  'Roti, Lauki Chana, Dal, Rice',
+  'Roti, Dal Makhani, Jeera Rice, Halwa'
+];
+
+export const INITIAL_MENU: MenuItem[] = [0, 1, 2, 3, 4, 5, 6].flatMap((weekday) => [
+  { weekday, meal: 'breakfast' as const, items: weekday === 0 ? 'Puri Sabzi, Tea' : 'Paratha, Curd, Tea' },
+  { weekday, meal: 'lunch' as const, items: WEEK_LUNCH[weekday] },
+  { weekday, meal: 'dinner' as const, items: WEEK_DINNER[weekday] }
+]);
+
+export const INITIAL_TIMINGS: DiningTiming[] = [
+  { meal: 'breakfast', start_time: '07:30', end_time: '09:00' },
+  { meal: 'lunch', start_time: '12:30', end_time: '14:30' },
+  { meal: 'dinner', start_time: '19:30', end_time: '21:30' }
+];
+
+/* ------------------------------------------ reviews ------------------------------------------ */
 
 export const INITIAL_REVIEWS: FoodReview[] = [
   // Today's reviews (2026-11-20)

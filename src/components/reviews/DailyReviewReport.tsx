@@ -37,6 +37,10 @@ export const DailyReviewReport: React.FC<DailyReviewReportProps> = ({
   activeStudent,
   showSubmitButton = true
 }) => {
+  // Only students rate the food. The Munshi and Provost read the results.
+  const canSubmit = userRole === 'student' && showSubmitButton;
+  // The Munshi sees the overall ratings; the individual feedback feed is for the Provost and the students.
+  const showFeed = userRole !== 'munshi';
   const todayStr = useMemo(() => toDateKey(new Date()), []);
   const formattedToday = useMemo(
     () => new Date().toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }),
@@ -150,7 +154,7 @@ export const DailyReviewReport: React.FC<DailyReviewReportProps> = ({
               <span>Current Date: {formattedToday}</span>
             </div>
 
-            {showSubmitButton && (
+            {canSubmit && (
               <button
                 type="button"
                 onClick={() => setIsModalOpen(true)}
@@ -290,7 +294,7 @@ export const DailyReviewReport: React.FC<DailyReviewReportProps> = ({
               </h3>
             </div>
             <p className="text-xs text-slate-500 mt-0.5">
-              Specific cleanliness ratings submitted by residents for HM, QH, BH, KH, AK, and MB wings.
+              Cleanliness ratings submitted by residents for each hostel.
             </p>
           </div>
           <div className="text-xs text-slate-500 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-xl font-medium">
@@ -370,6 +374,7 @@ export const DailyReviewReport: React.FC<DailyReviewReportProps> = ({
       </div>
 
       {/* Student Reviews Feed & Feedback Section */}
+      {showFeed && (
       <div className="bg-white rounded-3xl p-4 sm:p-6 lg:p-7 shadow-sm border border-slate-200">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100">
           <div>
@@ -428,7 +433,7 @@ export const DailyReviewReport: React.FC<DailyReviewReportProps> = ({
             <p className="text-xs text-slate-400 mt-1">
               Be the first resident to rate today’s dining food and cleanliness!
             </p>
-            {showSubmitButton && (
+            {canSubmit && (
               <button
                 type="button"
                 onClick={() => setIsModalOpen(true)}
@@ -535,14 +540,15 @@ export const DailyReviewReport: React.FC<DailyReviewReportProps> = ({
           </div>
         )}
       </div>
+      )}
 
-      {/* Review Form Modal */}
-      <ReviewFormModal
+      {/* Review Form Modal (students only) */}
+      {canSubmit && <ReviewFormModal
         open={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         onReviewSubmitted={handleReviewCreated}
         activeStudent={activeStudent}
-      />
+      />}
     </div>
   );
 };

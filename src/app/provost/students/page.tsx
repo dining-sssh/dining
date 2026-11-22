@@ -1,35 +1,27 @@
 'use client';
 
 import React, { Suspense, useMemo, useState } from 'react';
-import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { Eye, FileSpreadsheet, Search, Trash2, Upload, UserPlus } from 'lucide-react';
+import { FileSpreadsheet, Search, Trash2, Upload, UserPlus } from 'lucide-react';
 import { HOSTEL_HOUSES, HostelHouseCode, Student } from '@/types';
 import { DataService } from '@/lib/dataService';
-import { formatMoney } from '@/lib/billingUtils';
-import { useProvostData } from '@/components/provost/ProvostData';
+import { formatDays, formatRupees } from '@/lib/diningEngine';
+import { useAdminData } from '@/components/admin/AdminData';
+import { diningLabel } from '@/components/admin/studentStatus';
 import { CsvUploadModal } from '@/components/csv/CsvUploadModal';
 import { AddStudentModal } from '@/components/provost/AddStudentModal';
-import {
-  BTN_ACCENT,
-  BTN_GHOST,
-  BTN_PRIMARY,
-  Card,
-  EmptyState,
-  HouseChips,
-  INPUT,
-  PageHeader,
-  Pill
-} from '@/components/admin/ui';
+import { BTN_ACCENT, BTN_GHOST, BTN_PRIMARY, Card, EmptyState, HouseChips, INPUT, PageHeader, Pill } from '@/components/admin/ui';
 import { toDateKey } from '@/components/student/studentUtils';
 
 const csvCell = (v: string) => `"${v.replace(/"/g, '""')}"`;
 
 function exportCsv(students: Student[]) {
   const rows = students.map((s) =>
-    [s.enrollment_no, s.name, s.house, s.room_no, s.course, s.email, s.previous_room || 'New Allotment'].map(csvCell).join(',')
+    [s.enrollment_no, s.name, s.house, s.room_no, s.course, s.email, s.previous_house || '', s.previous_room || 'New Allotment', s.remarks || '']
+      .map(csvCell)
+      .join(',')
   );
-  const header = 'Enrollment Number,Name,House,Room Number,Course,Email,Previous room';
+  const header = 'Enrollment Number,Name,House,Room Number,Course,Email,Previous hostel,Previous room,Remarks';
   const blob = new Blob([[header, ...rows].join('\n')], { type: 'text/csv' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -42,16 +34,15 @@ function exportCsv(students: Student[]) {
 }
 
 function StudentsView() {
-  const { students, balanceByStudent, reload } = useProvostData();
+  const { students, accounts, activeCount, reload } = useAdminData();
   const params = useSearchParams();
   const initialHouse = params.get('house');
 
   const [query, setQuery] = useState('');
-  const [house, setHouse] = useState(
-    initialHouse && initialHouse in HOSTEL_HOUSES ? initialHouse : 'ALL'
-  );
+  const [house, setHouse] = useState(initialHouse && initialHouse in HOSTEL_HOUSES ? initialHouse : 'ALL');
   const [csvOpen, setCsvOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
+  const [error, setError] = useState('');
 
   const counts = useMemo(() => {
     const c: Partial<Record<HostelHouseCode, number>> = {};
@@ -77,15 +68,20 @@ function StudentsView() {
 
   const remove = async (s: Student) => {
     if (!confirm(`Remove ${s.name} from the dining roster?`)) return;
-    await DataService.deleteStudent(s.id);
-    await reload();
+    setError('');
+    try {
+      await DataService.deleteStudent(s.id);
+      await reload();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not remove the student.');
+    }
   };
 
   return (
     <>
       <PageHeader
         title="Students"
-        subtitle={`${filtered.length} of ${students.length} residents`}
+        subtitle={`${filtered.length} shown of ${students.length} residents · ${activeCount} with dining running`}
         actions={
           <>
             <button type="button" onClick={() => setCsvOpen(true)} className={BTN_PRIMARY}>
@@ -99,6 +95,8 @@ function StudentsView() {
           </>
         }
       />
+
+      {error && <p role="alert" className="rounded-2xl border border-rose-200 bg-rose-50 p-3 text-xs font-semibold text-rose-700">{error}</p>}
 
       <Card className="space-y-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -131,15 +129,17 @@ function StudentsView() {
                   <tr>
                     <th className="p-3">Enrollment</th>
                     <th className="p-3">Student</th>
-                    <th className="p-3">House · Room</th>
-                    <th className="p-3">Deficit</th>
-                    <th className="p-3">Previous room</th>
+                    <th className="p-3">Hostel · Room</th>
+                    <th className="p-3">Dining</th>
+                    <th className="p-3">Balance</th>
+                    <th className="p-3">Pending deficit</th>
                     <th className="p-3 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {filtered.map((s) => {
-                    const balance = balanceByStudent.get(s.id) || 0;
+                    const state = accounts.get(s.id);
+                    const label = diningLabel(s, state);
                     return (
                       <tr key={s.id} className="hover:bg-slate-50">
                         <td className="p-3 font-mono font-bold text-emerald-900">{s.enrollment_no}</td>
@@ -148,32 +148,21 @@ function StudentsView() {
                           <div className="text-[11px] text-slate-500">{s.course}</div>
                         </td>
                         <td className="p-3">
-                          <span className={`rounded px-1.5 py-0.5 text-[11px] font-bold ${HOSTEL_HOUSES[s.house]?.color ?? ''}`}>
-                            {s.house}
-                          </span>
+                          <span className={`rounded px-1.5 py-0.5 text-[11px] font-bold ${HOSTEL_HOUSES[s.house]?.color ?? ''}`}>{s.house}</span>
                           <span className="ml-2 font-bold text-slate-900">{s.room_no}</span>
                         </td>
+                        <td className="p-3"><Pill tone={label.tone}>{label.text}</Pill></td>
+                        <td className="p-3 font-bold text-slate-900">
+                          {state ? (state.negativeDays > 0 ? `-${state.negativeDays}` : formatDays(state.wallet)) : '—'} d
+                        </td>
                         <td className="p-3">
-                          <Pill tone={balance > 0 ? 'rose' : 'emerald'}>
-                            {balance > 0 ? formatMoney(balance) : balance < 0 ? `Advance ${formatMoney(-balance)}` : 'Cleared'}
+                          <Pill tone={state && state.pendingAmount > 0.005 ? 'rose' : 'emerald'}>
+                            {state && state.pendingAmount > 0.005 ? formatRupees(state.pendingAmount) : 'None'}
                           </Pill>
                         </td>
-                        <td className="p-3 text-slate-500">{s.previous_room || 'New allotment'}</td>
                         <td className="p-3">
-                          <div className="flex justify-end gap-1">
-                            <Link
-                              href={`/provost/inspector?student=${s.id}`}
-                              className="press rounded-lg p-2 text-slate-500 hover:bg-emerald-50 hover:text-emerald-800"
-                              title="View as student"
-                            >
-                              <Eye className="h-4 w-4" />
-                            </Link>
-                            <button
-                              type="button"
-                              onClick={() => remove(s)}
-                              className="press rounded-lg p-2 text-slate-400 hover:bg-rose-50 hover:text-rose-600"
-                              title="Remove student"
-                            >
+                          <div className="flex justify-end">
+                            <button type="button" onClick={() => remove(s)} className="press rounded-lg p-2 text-slate-400 hover:bg-rose-50 hover:text-rose-600" title="Remove student">
                               <Trash2 className="h-4 w-4" />
                             </button>
                           </div>
@@ -188,7 +177,8 @@ function StudentsView() {
             {/* Phone: cards */}
             <ul className="space-y-3 md:hidden">
               {filtered.map((s) => {
-                const balance = balanceByStudent.get(s.id) || 0;
+                const state = accounts.get(s.id);
+                const label = diningLabel(s, state);
                 return (
                   <li key={s.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-3.5">
                     <div className="flex items-start justify-between gap-3">
@@ -198,34 +188,20 @@ function StudentsView() {
                         <p className="mt-0.5 truncate text-[11px] text-slate-500">{s.course}</p>
                       </div>
                       <div className="shrink-0 text-right">
-                        <span className={`rounded px-1.5 py-0.5 text-[11px] font-bold ${HOSTEL_HOUSES[s.house]?.color ?? ''}`}>
-                          {s.house}
-                        </span>
+                        <span className={`rounded px-1.5 py-0.5 text-[11px] font-bold ${HOSTEL_HOUSES[s.house]?.color ?? ''}`}>{s.house}</span>
                         <p className="mt-1 text-sm font-extrabold text-slate-900">Room {s.room_no}</p>
-                        <p className="text-[10px] text-slate-400">Prev: {s.previous_room || 'New Allotment'}</p>
                       </div>
                     </div>
                     <div className="mt-3 flex items-center justify-between gap-2">
-                      <Pill tone={balance > 0 ? 'rose' : 'emerald'}>
-                        {balance > 0 ? `Deficit ${formatMoney(balance)}` : balance < 0 ? `Advance ${formatMoney(-balance)}` : 'Cleared'}
-                      </Pill>
-                      <div className="flex gap-1">
-                        <Link
-                          href={`/provost/inspector?student=${s.id}`}
-                          className="press rounded-full bg-white p-2.5 text-emerald-800 ring-1 ring-slate-200"
-                          aria-label={`View ${s.name} as student`}
-                        >
-                          <Eye className="h-4 w-4" />
-                        </Link>
-                        <button
-                          type="button"
-                          onClick={() => remove(s)}
-                          className="press rounded-full bg-white p-2.5 text-rose-600 ring-1 ring-slate-200"
-                          aria-label={`Remove ${s.name}`}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <Pill tone={label.tone}>{label.text}</Pill>
+                        <Pill tone={state && state.pendingAmount > 0.005 ? 'rose' : 'emerald'}>
+                          {state && state.pendingAmount > 0.005 ? `Deficit ${formatRupees(state.pendingAmount)}` : 'No deficit'}
+                        </Pill>
                       </div>
+                      <button type="button" onClick={() => remove(s)} className="press rounded-full bg-white p-2.5 text-rose-600 ring-1 ring-slate-200" aria-label={`Remove ${s.name}`}>
+                        <Trash2 className="h-4 w-4" />
+                      </button>
                     </div>
                   </li>
                 );
@@ -249,7 +225,6 @@ function StudentsView() {
 }
 
 export default function ProvostStudentsPage() {
-  // useSearchParams needs a Suspense boundary for static rendering.
   return (
     <Suspense fallback={<p className="py-10 text-center text-sm text-slate-400">Loading students…</p>}>
       <StudentsView />

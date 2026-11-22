@@ -37,11 +37,12 @@ export const CsvUploadModal: React.FC<CsvUploadModalProps> = ({ isOpen, onClose,
   const normalizeHouseCode = (rawHouse: string): HostelHouseCode | null => {
     if (!rawHouse) return null;
     const clean = rawHouse.trim().toUpperCase();
-    if (['HM', 'BH', 'QH', 'KH', 'AK', 'MB'].includes(clean)) {
+    if (['HM', 'JK', 'BH', 'QH', 'KH', 'AK', 'MB'].includes(clean)) {
       return clean as HostelHouseCode;
     }
     // Prefix match
     if (clean.startsWith('HM')) return 'HM';
+    if (clean.startsWith('JK') || clean.startsWith('J.K')) return 'JK';
     if (clean.startsWith('BH')) return 'BH';
     if (clean.startsWith('QH')) return 'QH';
     if (clean.startsWith('KH')) return 'KH';
@@ -102,7 +103,7 @@ export const CsvUploadModal: React.FC<CsvUploadModalProps> = ({ isOpen, onClose,
             validationError = 'Missing Enrollment Number';
           } else if (!houseCode) {
             isValid = false;
-            validationError = `Invalid House "${rawHouse}". Must be HM, BH, QH, KH, AK, or MB.`;
+            validationError = `Invalid House "${rawHouse}". Must be HM, JK, MB, KH, BH, QH, or AK.`;
           } else if (!room) {
             isValid = false;
             validationError = 'Missing Room Number';

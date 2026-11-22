@@ -1,4 +1,15 @@
-import { DiningDailyRecord, RebateRequest } from '@/types';
+import { DiningRequest, GraceExtension } from '@/types';
+import {
+  AccountState,
+  DayInfo,
+  DayKind,
+  LOW_BALANCE_DAYS,
+  dayInfoFor,
+  diningMonths,
+  formatDays,
+  formatRupees,
+  sessionOfDate as engineSessionOfDate
+} from '@/lib/diningEngine';
 
 export const HALL_NAME = 'Sulaiman Hall';
 
@@ -7,6 +18,10 @@ export const SESSIONS = [
   { value: '2025-2026', label: 'Session 2025-2026 (Previous)' },
   { value: '2024-2025', label: 'Session 2024-2025 (Past)' }
 ];
+
+/** The dining year runs August to May. */
+export const sessionMonths = diningMonths;
+export const sessionOfDate = engineSessionOfDate;
 
 /* ------------------------------------------------------------------ */
 /* Date helpers (all keys are local-time "YYYY-MM-DD" strings)         */
@@ -58,6 +73,12 @@ export const monthLabel = (monthKey: string): string => {
   return `${MONTHS_LONG[m - 1]} ${y}`;
 };
 
+/** "2026-11" -> "Nov-26" */
+export const monthTag = (monthKey: string): string => {
+  const [y, m] = monthKey.split('-').map(Number);
+  return `${MONTHS_SHORT[m - 1]}-${String(y).slice(2)}`;
+};
+
 export const shiftMonth = (monthKey: string, delta: number): string => {
   const [y, m] = monthKey.split('-').map(Number);
   const d = new Date(y, m - 1 + delta, 1);
@@ -67,170 +88,189 @@ export const shiftMonth = (monthKey: string, delta: number): string => {
 export const formatInDays = (n: number): string => (n === 1 ? 'Tomorrow' : `in ${n} Days`);
 
 /* ------------------------------------------------------------------ */
-/* Dining day status                                                   */
+/* Calendar day labels                                                 */
 /* ------------------------------------------------------------------ */
 
-export type DayStatus = 'done' | 'off' | 'rebate' | 'upcoming' | 'none';
+export const DAY_LABEL: Record<DayKind, string> = {
+  eaten: 'Dining done',
+  deficit: 'Eaten on deficit',
+  off: 'Dining off',
+  stopped: 'Dining stopped',
+  break: 'Vacation (June, July)',
+  upcoming: 'Upcoming',
+  before: 'Before dining started'
+};
 
-export interface DayInfo {
-  status: DayStatus;
-  record?: DiningDailyRecord;
-  rebateReason?: string;
-}
-
-export const isEaten = (r: DiningDailyRecord): boolean =>
-  !r.is_rebate && Boolean(r.eaten ?? (r.lunch || r.dinner));
-
-export type DayResolver = (dateKey: string) => DayInfo;
-
-export function createDayResolver(
-  records: DiningDailyRecord[],
-  rebates: RebateRequest[],
-  todayKey: string
-): DayResolver {
-  const byDate = new Map(records.map((r) => [r.date, r]));
-  const approved = rebates.filter((r) => r.status === 'approved');
-
-  return (key: string): DayInfo => {
-    const record = byDate.get(key);
-    const request = approved.find((r) => key >= r.start_date && key <= r.end_date);
-
-    if (record?.is_rebate) {
-      return { status: 'rebate', record, rebateReason: record.rebate_reason ?? request?.reason };
-    }
-    // Past/today days with a Munshi entry are decided by that entry.
-    if (record && key <= todayKey) {
-      return { status: isEaten(record) ? 'done' : 'off', record };
-    }
-    // Approved leave covers days that have no entry yet (mostly upcoming days).
-    if (request) {
-      return { status: 'rebate', record, rebateReason: request.reason };
-    }
-    if (key >= todayKey) {
-      return { status: 'upcoming', record };
-    }
-    return { status: 'none' };
-  };
+/** The sentence shown when a date is tapped or hovered. */
+export function describeDay(info: DayInfo): string {
+  if (info.kind === 'deficit') {
+    return `${DAY_LABEL.deficit}. Deficit ${formatRupees(info.deficit)}${info.settled ? ' (paid)' : ' (unpaid)'}`;
+  }
+  if (info.kind === 'eaten') return `${DAY_LABEL.eaten}. No deficit`;
+  if (info.kind === 'stopped') return `${DAY_LABEL.stopped}. Pay to start again. No deficit`;
+  return `${DAY_LABEL[info.kind]}. No deficit`;
 }
 
 /* ------------------------------------------------------------------ */
-/* Home hero (Active / Inactive / Off)                                 */
+/* Home hero                                                           */
 /* ------------------------------------------------------------------ */
 
-export type HeroKind = 'active' | 'inactive' | 'off';
+export type HeroKind = 'active' | 'grace' | 'stopped' | 'off' | 'break';
 
 export interface HeroState {
   kind: HeroKind;
   lastDiningKey: string | null;
+  /** Days until the next dining day, when it is known. */
   nextDiningInDays: number | null;
+  /** Off: days until dining restarts (only when a restart is already approved). */
   resumeInDays: number | null;
-  offPeriod: { start: string; end: string; reason?: string } | null;
+  offSince: string | null;
+  balanceDays: number;
+  negativeDays: number;
+  graceLimit: number;
+  pendingAmount: number;
 }
 
-const MAX_SCAN_DAYS = 366;
-
-export function computeHeroState(resolve: DayResolver, todayKey: string): HeroState {
-  const today = resolve(todayKey);
+export function computeHero(state: AccountState, requests: DiningRequest[], todayKey: string): HeroState {
   const kind: HeroKind =
-    today.status === 'rebate' ? 'off' : today.status === 'off' ? 'inactive' : 'active';
-
-  let lastDiningKey: string | null = null;
-  for (let i = 0; i <= MAX_SCAN_DAYS; i++) {
-    const key = addDays(todayKey, -i);
-    if (resolve(key).status === 'done') {
-      lastDiningKey = key;
-      break;
-    }
-  }
+    state.status === 'off'
+      ? 'off'
+      : state.status === 'stopped'
+      ? 'stopped'
+      : state.status === 'break'
+      ? 'break'
+      : state.negativeDays > 0
+      ? 'grace'
+      : 'active';
 
   let nextDiningInDays: number | null = null;
-  for (let i = 1; i <= MAX_SCAN_DAYS; i++) {
-    if (resolve(addDays(todayKey, i)).status !== 'rebate') {
-      nextDiningInDays = i;
+  let resumeInDays: number | null = null;
+  for (let i = 1; i <= 366; i++) {
+    const k = dayInfoFor(state, requests, addDays(todayKey, i)).kind;
+    if (k === 'upcoming') {
+      if (kind === 'off') resumeInDays = i;
+      else nextDiningInDays = i;
       break;
     }
   }
+  if (kind === 'stopped') nextDiningInDays = null;
 
-  let offPeriod: HeroState['offPeriod'] = null;
-  let resumeInDays: number | null = null;
-  if (kind === 'off') {
-    let start = todayKey;
-    let end = todayKey;
-    for (let i = 0; i < MAX_SCAN_DAYS && resolve(addDays(start, -1)).status === 'rebate'; i++) {
-      start = addDays(start, -1);
-    }
-    for (let i = 0; i < MAX_SCAN_DAYS && resolve(addDays(end, 1)).status === 'rebate'; i++) {
-      end = addDays(end, 1);
-    }
-    offPeriod = { start, end, reason: today.rebateReason };
-    resumeInDays = diffDays(todayKey, addDays(end, 1));
-  }
-
-  return { kind, lastDiningKey, nextDiningInDays, resumeInDays, offPeriod };
-}
-
-/* ------------------------------------------------------------------ */
-/* Month statistics                                                    */
-/* ------------------------------------------------------------------ */
-
-export interface MonthStats {
-  dietsLogged: number;
-  daysEaten: number;
-  daysNotEaten: number;
-  rebateDays: number;
-}
-
-export function computeMonthStats(records: DiningDailyRecord[], monthKey: string): MonthStats {
-  const inMonth = records.filter((r) => r.date.startsWith(monthKey));
-  const eaten = inMonth.filter(isEaten);
   return {
-    dietsLogged: eaten.length + inMonth.reduce((acc, r) => acc + (r.guest_diets || 0), 0),
-    daysEaten: eaten.length,
-    daysNotEaten: inMonth.filter((r) => !r.is_rebate && !isEaten(r)).length,
-    rebateDays: inMonth.filter((r) => r.is_rebate).length
+    kind,
+    lastDiningKey: state.lastEaten ?? null,
+    nextDiningInDays,
+    resumeInDays,
+    offSince: state.offSince ?? null,
+    balanceDays: state.balanceDays,
+    negativeDays: state.negativeDays,
+    graceLimit: state.graceLimit,
+    pendingAmount: state.pendingAmount
   };
 }
 
 /* ------------------------------------------------------------------ */
-/* Session helpers                                                     */
+/* Notifications (worked out again on every load, so they stay until   */
+/* the balance is fixed)                                               */
 /* ------------------------------------------------------------------ */
 
-/** "2026-2027" -> ["2026-08", ... "2027-07"]. The dining year runs August to July, like the Munshi register. */
-export function sessionMonths(session: string): string[] {
-  const startYear = Number(session.split('-')[0]);
-  return Array.from({ length: 12 }, (_, i) => {
-    const m = ((7 + i) % 12) + 1;
-    const y = m >= 8 ? startYear : startYear + 1;
-    return `${y}-${pad(m)}`;
-  });
+export interface Notice {
+  id: string;
+  level: 'critical' | 'warning' | 'info';
+  title: string;
+  body: string;
 }
 
-export interface MonthAttendance {
-  present: number;
-  absent: number;
-  rebate: number;
-  guests: number;
-  recorded: number;
-}
+export function buildNotices(
+  state: AccountState,
+  requests: DiningRequest[],
+  extensions: GraceExtension[],
+  todayKey: string
+): Notice[] {
+  const notices: Notice[] = [];
 
-/** One pass over all records, grouped by "YYYY-MM". */
-export function groupAttendanceByMonth(records: DiningDailyRecord[]): Map<string, MonthAttendance> {
-  const map = new Map<string, MonthAttendance>();
-  records.forEach((r) => {
-    const key = r.date.slice(0, 7);
-    const m = map.get(key) ?? { present: 0, absent: 0, rebate: 0, guests: 0, recorded: 0 };
-    if (r.is_rebate) m.rebate += 1;
-    else if (isEaten(r)) m.present += 1;
-    else m.absent += 1;
-    m.guests += r.guest_diets || 0;
-    m.recorded += 1;
-    map.set(key, m);
-  });
-  return map;
-}
-/** "2026-11-20" -> "2026-2027" (the dining year starts in August). */
-export function sessionOfDate(dateKey: string): string {
-  const [y, m] = dateKey.split('-').map(Number);
-  const start = m >= 8 ? y : y - 1;
-  return `${start}-${start + 1}`;
+  if (state.status === 'stopped') {
+    notices.push({
+      id: 'stopped',
+      level: 'critical',
+      title: 'Dining stopped',
+      body: `You have used all ${state.graceLimit} grace days (balance -${state.negativeDays}). Deposit at the Munshi office to start again, or ask for an extension.`
+    });
+  } else if (state.status === 'on' && state.negativeDays > 0) {
+    notices.push({
+      id: 'grace',
+      level: 'warning',
+      title: `Balance is -${state.negativeDays} day${state.negativeDays > 1 ? 's' : ''}`,
+      body: `You are eating on grace days (${state.negativeDays} of ${state.graceLimit}). Dining stops at -${state.graceLimit}. Deposit ${formatRupees(
+        state.negativeAmount
+      )} or more to clear it.`
+    });
+  } else if (state.status === 'on' && state.wallet <= 1e-9) {
+    notices.push({
+      id: 'zero',
+      level: 'critical',
+      title: '0 days left',
+      body: `Your dining balance has run out. You can still eat for ${state.graceLimit} grace days, then dining stops. Please deposit now.`
+    });
+  } else if (state.status === 'on' && state.wallet <= LOW_BALANCE_DAYS) {
+    notices.push({
+      id: 'low',
+      level: 'warning',
+      title: `Only ${formatDays(state.wallet)} day${state.wallet > 1 ? 's' : ''} left`,
+      body: 'Your paid days are about to finish. Deposit at the Munshi office to avoid a deficit.'
+    });
+  }
+
+  const carried = state.carriedPending.reduce((a, c) => a + c.amount, 0);
+  if (carried > 0) {
+    notices.push({
+      id: 'carried',
+      level: 'info',
+      title: `Earlier deficit ${formatRupees(carried)}`,
+      body: `Pending for ${state.carriedPending.map((c) => monthTag(c.month)).join(', ')}. The Munshi can clear it with your next deposit.`
+    });
+  }
+
+  if (state.status === 'off' && state.offSince) {
+    notices.push({
+      id: 'off',
+      level: 'info',
+      title: 'Dining is off',
+      body: `Closed since ${formatLongDate(state.offSince)}. Use "Request to open dining" when you are back.`
+    });
+  }
+
+  requests
+    .filter((r) => r.status === 'pending')
+    .forEach((r) =>
+      notices.push({
+        id: `req-${r.id}`,
+        level: 'info',
+        title: r.kind === 'off' ? 'Dining off request is pending' : 'Open dining request is pending',
+        body: `From ${formatLongDate(r.start_date)}. The Munshi will review it.`
+      })
+    );
+
+  requests
+    .filter((r) => r.status !== 'pending' && r.reviewed_at && diffDays(String(r.reviewed_at).slice(0, 10), todayKey) <= 7)
+    .forEach((r) =>
+      notices.push({
+        id: `dec-${r.id}`,
+        level: 'info',
+        title: `Request ${r.status}`,
+        body: `${r.kind === 'off' ? 'Dining off' : 'Open dining'} from ${formatLongDate(r.start_date)}.`
+      })
+    );
+
+  extensions
+    .filter((e) => e.status === 'applied' && e.applied_at && diffDays(String(e.applied_at), todayKey) <= 7)
+    .forEach((e) =>
+      notices.push({
+        id: `ext-${e.id}`,
+        level: 'info',
+        title: `${e.extra_days} extra grace day${e.extra_days > 1 ? 's' : ''} approved`,
+        body: 'The Provost approved more days beyond -3 and the Munshi has applied them.'
+      })
+    );
+
+  return notices;
 }

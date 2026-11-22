@@ -10,10 +10,12 @@ insert into public.staff_users (email, role, full_name) values
 on conflict (email) do update set role = excluded.role, full_name = excluded.full_name;
 
 -- Students. A student logs in with the Google account that matches `email`.
+-- dining_from is the first day dining counts for the student. Every dining day from then on uses
+-- one paid day, so set it to the day the student really starts (it defaults to today).
 insert into public.students
-  (enrollment_no, name, house, room_no, course, email, previous_room, session, status)
+  (enrollment_no, name, house, room_no, course, email, previous_room, previous_house, remarks, session, status, dining_from)
 values
-  ('GQ0103', 'Aarif Khan', 'HM', '17', 'B.Tech', 'iamaakoji@gmail.com', 'New Allotment', '2026-2027', 'active')
+  ('GQ0103', 'Aarif Khan', 'HM', '17', 'B.Tech', 'iamaakoji@gmail.com', 'New Allotment', null, null, '2026-2027', 'active', current_date)
 on conflict (enrollment_no) do update set
   name = excluded.name, house = excluded.house, room_no = excluded.room_no,
   course = excluded.course, email = excluded.email;

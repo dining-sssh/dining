@@ -23,8 +23,6 @@ export function saveAuthSession(session: AuthSession): void {
 }
 
 export function clearAuthSession(): void {
-  // Also end the Google (Supabase) session, otherwise the login page would sign the user straight back in.
-  supabase?.auth.signOut().catch(() => undefined);
   try {
     sessionStorage.removeItem(AUTH_STORAGE_KEY);
   } catch (e) {
@@ -32,6 +30,19 @@ export function clearAuthSession(): void {
   }
 }
 
+/**
+ * Full logout. The Google (Supabase) session is ended first and awaited; otherwise the login page
+ * could still find it and sign the user straight back in, or the screens behind it would start
+ * failing database calls while they are still on screen.
+ */
+export async function signOutEverywhere(): Promise<void> {
+  try {
+    if (supabase) await supabase.auth.signOut();
+  } catch (e) {
+    console.warn('Could not end the Google session cleanly:', e);
+  }
+  clearAuthSession();
+}
 /** Which panel this login belongs to. Each panel lives at its own URL. */
 export function panelOf(session: AuthSession): UserRole {
   if (session.role === 'student') return 'student';

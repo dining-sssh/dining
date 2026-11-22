@@ -1,6 +1,6 @@
-import { FoodReview, HostelHouseCode } from '@/types';
+import { FoodReview, HostelHouseCode, HOUSE_CODES } from '@/types';
 
-export const HOUSE_CODES: HostelHouseCode[] = ['HM', 'BH', 'QH', 'KH', 'AK', 'MB'];
+export { HOUSE_CODES };
 
 export interface ReviewAggregate {
   count: number;

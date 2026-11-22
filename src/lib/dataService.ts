@@ -1,35 +1,50 @@
-import { 
-  Student, 
-  DiningDailyRecord, 
-  MonthlyBill, 
-  PaymentSlip, 
-  RebateRequest, 
-  MessSettings, 
-  HostelHouseCode, 
-  FoodReview, 
-  DailyReviewSummary, 
-  HOSTEL_HOUSES 
+import {
+  Student,
+  DiningRequest,
+  PaymentSlip,
+  DeficitEntry,
+  GraceExtension,
+  MenuItem,
+  DiningTiming,
+  MessSettings,
+  HostelHouseCode,
+  FoodReview,
+  DailyReviewSummary,
+  HOSTEL_HOUSES,
+  HOUSE_CODES
 } from '@/types';
-import { 
-  INITIAL_STUDENTS, 
-  INITIAL_SETTINGS, 
-  generateInitialDailyRecords, 
-  generateInitialBills, 
-  generateInitialPayments, 
-  INITIAL_REBATES,
-  INITIAL_REVIEWS
+import {
+  INITIAL_STUDENTS,
+  INITIAL_SETTINGS,
+  INITIAL_REVIEWS,
+  INITIAL_MENU,
+  INITIAL_TIMINGS,
+  generateInitialSlips,
+  generateInitialRequests,
+  generateInitialEntries,
+  generateInitialExtensions
 } from './mockData';
 import { supabase, isSupabaseConfigured } from './supabaseClient';
 import * as db from './db';
 
-const STORAGE_KEY_STUDENTS = 'amu_dining_students';
-// v2 keys: the mock ledger was regenerated (full session of records, consistent bills and slips).
-const STORAGE_KEY_RECORDS = 'amu_dining_records_v2';
-const STORAGE_KEY_BILLS = 'amu_dining_bills_v2';
-const STORAGE_KEY_PAYMENTS = 'amu_dining_payments_v1';
-const STORAGE_KEY_REBATES = 'amu_dining_rebates';
-const STORAGE_KEY_SETTINGS = 'amu_dining_settings';
+// v-suffixed keys: the demo data changed shape with the per-day dining model.
+const STORAGE_KEY_STUDENTS = 'amu_dining_students_v3';
+const STORAGE_KEY_REQUESTS = 'amu_dining_requests_v1';
+const STORAGE_KEY_PAYMENTS = 'amu_dining_payments_v3';
+const STORAGE_KEY_ENTRIES = 'amu_dining_entries_v1';
+const STORAGE_KEY_EXTENSIONS = 'amu_dining_extensions_v1';
+const STORAGE_KEY_MENU = 'amu_dining_menu_v1';
+const STORAGE_KEY_TIMINGS = 'amu_dining_timings_v1';
+const STORAGE_KEY_SETTINGS = 'amu_dining_settings_v2';
 const STORAGE_KEY_REVIEWS = 'amu_dining_reviews';
+const OLD_STORAGE_KEYS = [
+  'amu_dining_students',
+  'amu_dining_records_v2',
+  'amu_dining_bills_v2',
+  'amu_dining_payments_v1',
+  'amu_dining_rebates',
+  'amu_dining_settings'
+];
 
 /**
  * With Supabase keys in .env.local every call goes to the database (and Row Level Security decides
@@ -87,21 +102,10 @@ async function safeRead<T>(label: string, read: () => Promise<T>, empty: T): Pro
 }
 
 const pad2 = (n: number) => String(n).padStart(2, '0');
-const dateKey = (d: Date) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
-
-/** Every YYYY-MM-DD from start to end (inclusive), at most 400 days. */
-function eachDate(start: string, end: string): string[] {
-  const [sy, sm, sd] = start.split('-').map(Number);
-  const [ey, em, ed] = end.split('-').map(Number);
-  const cur = new Date(sy, sm - 1, sd);
-  const last = new Date(ey, em - 1, ed);
-  const out: string[] = [];
-  while (cur <= last && out.length < 400) {
-    out.push(dateKey(cur));
-    cur.setDate(cur.getDate() + 1);
-  }
-  return out;
-}
+const todayKey = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+};
 
 export const DataService = {
   // Check connection status
@@ -117,27 +121,59 @@ export const DataService = {
   },
 
   // --- STUDENTS ---
-  /** strict makes database errors throw (used by login, so the real reason can be shown). */
+  /** `strict` makes database errors throw (used by login, so the real reason can be shown). */
   async getStudents(opts: { strict?: boolean } = {}): Promise<Student[]> {
     if (useDb()) return opts.strict ? db.listStudents() : safeRead('students', db.listStudents, []);
     return getLocal<Student[]>(STORAGE_KEY_STUDENTS, INITIAL_STUDENTS);
   },
 
   async addStudent(student: Omit<Student, 'id'>): Promise<Student> {
+    const clean = {
+      ...student,
+      enrollment_no: student.enrollment_no.trim().toUpperCase(),
+      email: student.email.trim().toLowerCase(),
+      previous_room: student.previous_room?.trim() || 'New Allotment'
+    };
+
     if (useDb()) {
-      const [created] = await db.insertStudents([student]);
+      const [created] = await db.insertStudents([clean]);
       return created;
     }
 
-    const newStudent: Student = {
-      ...student,
-      previous_room: student.previous_room?.trim() || 'New Allotment',
-      id: `s-${Date.now()}`
-    };
     const students = await this.getStudents();
-    const updated = [newStudent, ...students];
-    setLocal(STORAGE_KEY_STUDENTS, updated);
+    if (students.some((s) => s.enrollment_no.toUpperCase() === clean.enrollment_no)) {
+      throw new Error(`Enrollment ${clean.enrollment_no} already exists.`);
+    }
+    if (students.some((s) => s.email.toLowerCase() === clean.email)) {
+      throw new Error(`Email ${clean.email} is already used by another student.`);
+    }
+    const newStudent: Student = { ...clean, dining_from: clean.dining_from ?? todayKey(), id: `s-${Date.now()}` };
+    setLocal(STORAGE_KEY_STUDENTS, [newStudent, ...students]);
     return newStudent;
+  },
+
+  /** Edit details such as a mistyped email, remarks or previous hostel. */
+  async updateStudent(id: string, patch: Partial<Omit<Student, 'id'>>): Promise<Student> {
+    const normalised: Partial<Student> = {
+      ...patch,
+      ...(patch.email !== undefined ? { email: patch.email.trim().toLowerCase() } : {}),
+      ...(patch.enrollment_no !== undefined ? { enrollment_no: patch.enrollment_no.trim().toUpperCase() } : {})
+    };
+
+    if (useDb()) return db.patchStudent(id, normalised);
+
+    const students = await this.getStudents();
+    if (
+      normalised.email &&
+      students.some((s) => s.id !== id && s.email.toLowerCase() === normalised.email)
+    ) {
+      throw new Error(`Email ${normalised.email} is already used by another student.`);
+    }
+    const current = students.find((s) => s.id === id);
+    if (!current) throw new Error('Student not found.');
+    const updated: Student = { ...current, ...normalised };
+    setLocal(STORAGE_KEY_STUDENTS, students.map((s) => (s.id === id ? updated : s)));
+    return updated;
   },
 
   async bulkAddStudents(csvStudents: Array<{
@@ -167,8 +203,8 @@ export const DataService = {
         errors.push(`Row ${lineNum}: Enrollment ${enr} already exists.`);
         return;
       }
-      if (!['HM', 'BH', 'QH', 'KH', 'AK', 'MB'].includes(row.house)) {
-        errors.push(`Row ${lineNum}: Invalid House code "${row.house}". Must be HM, BH, QH, KH, AK, or MB.`);
+      if (!HOUSE_CODES.includes(row.house)) {
+        errors.push(`Row ${lineNum}: Invalid House code "${row.house}". Must be ${HOUSE_CODES.join(', ')}.`);
         return;
       }
       if (!row.name?.trim()) {
@@ -198,7 +234,8 @@ export const DataService = {
         email,
         previous_room: row.previous_room?.trim() || 'New Allotment',
         session: '2026-2027',
-        status: 'active'
+        status: 'active',
+        dining_from: todayKey()
       });
     });
 
@@ -224,113 +261,90 @@ export const DataService = {
       return;
     }
     const students = await this.getStudents();
-    const updated = students.filter(s => s.id !== id);
-    setLocal(STORAGE_KEY_STUDENTS, updated);
+    setLocal(STORAGE_KEY_STUDENTS, students.filter(s => s.id !== id));
   },
 
-  // --- DAY-WISE DINING RECORDS ---
-  async getDailyRecordsForDate(dateStr: string): Promise<DiningDailyRecord[]> {
-    if (useDb()) return safeRead('dining records', () => db.listRecords({ date: dateStr }), []);
-
-    const students = await this.getStudents();
-    const allRecords = getLocal<DiningDailyRecord[]>(
-      STORAGE_KEY_RECORDS, 
-      () => generateInitialDailyRecords(students)
-    );
-
-    let recordsForDate = allRecords.filter(r => r.date === dateStr);
-
-    // Demo data only: a day nobody has marked yet starts with everyone present.
-    if (recordsForDate.length === 0) {
-      recordsForDate = students.map(s => ({
-        id: `rec-${s.id}-${dateStr}`,
-        student_id: s.id,
-        enrollment_no: s.enrollment_no,
-        date: dateStr,
-        eaten: true,
-        lunch: true,
-        dinner: true,
-        is_rebate: false,
-        guest_diets: 0,
-        marked_by: 'Munshi'
-      }));
-      const updated = [...allRecords, ...recordsForDate];
-      setLocal(STORAGE_KEY_RECORDS, updated);
-    }
-
-    return recordsForDate;
+  // --- DINING ON / OFF REQUESTS ---
+  async getDiningRequests(): Promise<DiningRequest[]> {
+    if (useDb()) return safeRead('dining requests', db.listRequests, []);
+    return getLocal<DiningRequest[]>(STORAGE_KEY_REQUESTS, () => generateInitialRequests(INITIAL_STUDENTS));
   },
 
-  /** Pass `studentId` to load one student's days only (much lighter on a real database). */
-  async getAllDailyRecords(opts: { studentId?: string } = {}): Promise<DiningDailyRecord[]> {
-    if (useDb()) return safeRead('dining records', () => db.listRecords({ studentId: opts.studentId }), []);
+  /** A student asks to close dining (from a date, until restarted) or to open it again. Waits for the Munshi. */
+  async addDiningRequest(req: {
+    student_id: string;
+    enrollment_no: string;
+    student_name: string;
+    kind: 'off' | 'on';
+    start_date: string;
+    reason: string;
+  }): Promise<DiningRequest> {
+    if (useDb()) return db.insertRequest(req);
 
-    const students = await this.getStudents();
-    const all = getLocal<DiningDailyRecord[]>(
-      STORAGE_KEY_RECORDS, 
-      () => generateInitialDailyRecords(students)
-    );
-    return opts.studentId ? all.filter(r => r.student_id === opts.studentId) : all;
+    const created: DiningRequest = {
+      ...req,
+      id: `req-${Date.now()}`,
+      status: 'pending',
+      created_at: new Date().toISOString().split('T')[0]
+    };
+    const all = await this.getDiningRequests();
+    setLocal(STORAGE_KEY_REQUESTS, [created, ...all]);
+    return created;
   },
 
-  async updateDailyRecords(recordsToUpdate: DiningDailyRecord[]): Promise<void> {
+  /** Munshi approves or rejects a student's request. Approved requests change the dining status. */
+  async decideDiningRequest(id: string, status: 'approved' | 'rejected'): Promise<void> {
     if (useDb()) {
-      await db.upsertRecords(recordsToUpdate);
+      await db.setRequestStatus(id, status);
       return;
     }
-
-    const currentRecords = await this.getAllDailyRecords();
-    const map = new Map(currentRecords.map(r => [`${r.student_id}_${r.date}`, r]));
-
-    recordsToUpdate.forEach(r => {
-      map.set(`${r.student_id}_${r.date}`, r);
-    });
-
-    setLocal(STORAGE_KEY_RECORDS, Array.from(map.values()));
-  },
-
-  // --- MONTHLY BILLS ---
-  async getMonthlyBills(session?: string): Promise<MonthlyBill[]> {
-    if (useDb()) return safeRead('bills', () => db.listBills({ session }), []);
-
-    const students = await this.getStudents();
-    const bills = getLocal<MonthlyBill[]>(
-      STORAGE_KEY_BILLS, 
-      () => generateInitialBills(students)
-    );
-    if (session) {
-      return bills.filter(b => b.session === session);
-    }
-    return bills;
-  },
-
-  async getBillsForStudent(enrollmentNo: string, session?: string): Promise<MonthlyBill[]> {
-    if (useDb()) return safeRead('bills', () => db.listBills({ enrollmentNo, session }), []);
-
-    const allBills = await this.getMonthlyBills();
-    return allBills.filter(b => 
-      b.enrollment_no.toUpperCase() === enrollmentNo.toUpperCase() &&
-      (!session || b.session === session)
+    const all = await this.getDiningRequests();
+    setLocal(
+      STORAGE_KEY_REQUESTS,
+      all.map((r) => (r.id === id ? { ...r, status, reviewed_at: new Date().toISOString() } : r))
     );
   },
 
-  /** Makes (or refreshes) every active student's bill for a month from the register and current rates. Live database only. */
-  async generateBills(monthKey: string): Promise<number> {
-    if (!useDb()) return 0;
-    return db.generateBills(monthKey);
+  /**
+   * The Munshi closes or restarts dining for a student straight away, from any date
+   * (past dates included). It is saved as an already approved request.
+   */
+  async setDiningStatus(params: {
+    student: Pick<Student, 'id' | 'enrollment_no' | 'name'>;
+    kind: 'off' | 'on';
+    startDate: string;
+    reason: string;
+  }): Promise<DiningRequest> {
+    const row = {
+      student_id: params.student.id,
+      enrollment_no: params.student.enrollment_no,
+      student_name: params.student.name,
+      kind: params.kind,
+      start_date: params.startDate,
+      reason: params.reason,
+      status: 'approved' as const
+    };
+    if (useDb()) return db.insertRequest(row);
+
+    const created: DiningRequest = {
+      ...row,
+      id: `req-${Date.now()}`,
+      created_at: new Date().toISOString().split('T')[0],
+      reviewed_at: new Date().toISOString()
+    };
+    const all = await this.getDiningRequests();
+    setLocal(STORAGE_KEY_REQUESTS, [created, ...all]);
+    return created;
   },
 
   // --- PAYMENT SLIPS (Food Charges Slips) ---
   async getPaymentSlips(): Promise<PaymentSlip[]> {
     if (useDb()) return safeRead('slips', () => db.listSlips(), []);
-
-    const students = await this.getStudents();
-    return getLocal<PaymentSlip[]>(STORAGE_KEY_PAYMENTS, () => generateInitialPayments(students));
+    return getLocal<PaymentSlip[]>(STORAGE_KEY_PAYMENTS, () => generateInitialSlips(INITIAL_STUDENTS));
   },
 
   async getPaymentSlipsForStudent(enrollmentNo: string): Promise<PaymentSlip[]> {
     if (useDb()) return safeRead('slips', () => db.listSlips({ enrollmentNo }), []);
-
     const all = await this.getPaymentSlips();
     return all.filter(s => s.enrollment_no.toUpperCase() === enrollmentNo.toUpperCase());
   },
@@ -347,168 +361,110 @@ export const DataService = {
     return created;
   },
 
-  // --- REBATES ---
-  async getRebateRequests(): Promise<RebateRequest[]> {
-    if (useDb()) return safeRead('rebate requests', db.listRebates, []);
-    return getLocal<RebateRequest[]>(STORAGE_KEY_REBATES, INITIAL_REBATES);
+  // --- CARRIED DEFICITS ---
+  async getDeficitEntries(): Promise<DeficitEntry[]> {
+    if (useDb()) return safeRead('deficits', db.listEntries, []);
+    return getLocal<DeficitEntry[]>(STORAGE_KEY_ENTRIES, () => generateInitialEntries(INITIAL_STUDENTS));
   },
 
-  async addRebateRequest(req: Omit<RebateRequest, 'id' | 'status' | 'created_at'>): Promise<RebateRequest> {
-    if (useDb()) return db.insertRebate(req);
+  async addDeficitEntry(entry: Omit<DeficitEntry, 'id' | 'created_at'>): Promise<DeficitEntry> {
+    if (useDb()) return db.insertEntry(entry);
+    const created: DeficitEntry = { ...entry, id: `def-${Date.now()}`, created_at: todayKey() };
+    const all = await this.getDeficitEntries();
+    setLocal(STORAGE_KEY_ENTRIES, [...all, created]);
+    return created;
+  },
 
-    const newReq: RebateRequest = {
-      ...req,
-      id: `reb-${Date.now()}`,
-      status: 'pending',
-      created_at: new Date().toISOString().split('T')[0]
+  // --- GRACE EXTENSIONS (Provost approves, Munshi applies) ---
+  async getGraceExtensions(): Promise<GraceExtension[]> {
+    if (useDb()) return safeRead('extensions', db.listExtensions, []);
+    return getLocal<GraceExtension[]>(STORAGE_KEY_EXTENSIONS, () => generateInitialExtensions(INITIAL_STUDENTS));
+  },
+
+  /** Provost approves more grace days. It goes to the Munshi, who applies it. */
+  async approveGraceExtension(params: {
+    student: Pick<Student, 'id' | 'enrollment_no' | 'name'>;
+    extraDays: number;
+    note?: string;
+    approvedBy: string;
+  }): Promise<GraceExtension> {
+    const row = {
+      student_id: params.student.id,
+      enrollment_no: params.student.enrollment_no,
+      student_name: params.student.name,
+      extra_days: params.extraDays,
+      note: params.note || null,
+      approved_by: params.approvedBy
     };
-    const rebates = await this.getRebateRequests();
-    const updated = [newReq, ...rebates];
-    setLocal(STORAGE_KEY_REBATES, updated);
-    return newReq;
+    if (useDb()) return db.insertExtension(row);
+
+    const created: GraceExtension = {
+      ...row,
+      id: `ext-${Date.now()}`,
+      status: 'awaiting_munshi',
+      created_at: todayKey()
+    };
+    const all = await this.getGraceExtensions();
+    setLocal(STORAGE_KEY_EXTENSIONS, [created, ...all]);
+    return created;
   },
 
-  /** Marks every day from start to end as mess off for one student, keeping guest diets already noted. */
-  async markRebateDays(params: {
-    studentId: string;
-    enrollmentNo: string;
-    start: string;
-    end: string;
-    reason: string;
-    markedBy: string;
-  }): Promise<number> {
-    const existing = await this.getAllDailyRecords({ studentId: params.studentId });
-    const byDate = new Map(existing.map((r) => [r.date, r]));
-
-    const rows: DiningDailyRecord[] = eachDate(params.start, params.end).map((date) => ({
-      id: `rec-${params.studentId}-${date}`,
-      student_id: params.studentId,
-      enrollment_no: params.enrollmentNo,
-      guest_diets: 0,
-      ...byDate.get(date),
-      date,
-      eaten: false,
-      lunch: false,
-      dinner: false,
-      is_rebate: true,
-      rebate_reason: params.reason,
-      marked_by: params.markedBy
-    }));
-
-    await this.updateDailyRecords(rows);
-    return rows.length;
-  },
-
-  async updateRebateStatus(id: string, status: 'approved' | 'rejected'): Promise<void> {
-    const rebates = await this.getRebateRequests();
-    const reb = rebates.find(r => r.id === id);
-
+  /** Munshi carries out the Provost's approval; the extra days count from `onDate`. */
+  async applyGraceExtension(id: string, onDate: string): Promise<void> {
     if (useDb()) {
-      await db.setRebateStatus(id, status);
-    } else {
-      setLocal(STORAGE_KEY_REBATES, rebates.map(r => (r.id === id ? { ...r, status } : r)));
+      await db.setExtensionStatus(id, 'applied', onDate);
+      return;
     }
-
-    // Approved leave becomes mess-off days in the register
-    if (status === 'approved' && reb) {
-      await this.markRebateDays({
-        studentId: reb.student_id,
-        enrollmentNo: reb.enrollment_no,
-        start: reb.start_date,
-        end: reb.end_date,
-        reason: reb.reason,
-        markedBy: 'Provost'
-      });
-    }
+    const all = await this.getGraceExtensions();
+    setLocal(
+      STORAGE_KEY_EXTENSIONS,
+      all.map((e) => (e.id === id ? { ...e, status: 'applied' as const, applied_at: onDate } : e))
+    );
   },
 
-  /**
-   * Closes dining for a student starting from effectiveDate to endDate.
-   * Enforces AMU rule: If the student has already eaten lunch/meals today,
-   * dining cannot be closed on the same day; closure must take effect from the next day.
-   */
-  async closeDiningForStudent(params: {
-    studentId: string;
-    enrollmentNo: string;
-    studentName: string;
-    effectiveDate: string; // YYYY-MM-DD
-    endDate: string;       // YYYY-MM-DD
-    reason: string;
-    markedBy?: string;
-  }): Promise<{ affectedDays: number; rebate: RebateRequest; actualStartDate: string }> {
-    const today = new Date();
-    const todayStr = dateKey(today);
-
-    const dailyRecords = await this.getAllDailyRecords({ studentId: params.studentId });
-
-    // Check if the student has consumed meals today
-    const todayRec = dailyRecords.find((r) => r.date === todayStr);
-    const hasEatenToday = todayRec && (todayRec.lunch || todayRec.dinner || todayRec.eaten) && !todayRec.is_rebate;
-
-    // Enforce Rule: If eaten lunch/meals today, dining CANNOT be closed on the same day
-    let actualStartKey = params.effectiveDate;
-    if (params.effectiveDate <= todayStr && hasEatenToday) {
-      const tomorrow = new Date(today);
-      tomorrow.setDate(tomorrow.getDate() + 1);
-      actualStartKey = dateKey(tomorrow);
-    }
-
-    const reason = params.reason || 'Dining Closed by Munshi';
-    const affectedDays = await this.markRebateDays({
-      studentId: params.studentId,
-      enrollmentNo: params.enrollmentNo,
-      start: actualStartKey,
-      end: params.endDate,
-      reason,
-      markedBy: params.markedBy || 'Munshi'
-    });
-
-    // Record an approved rebate request for this closure
-    let newRebate: RebateRequest;
+  async cancelGraceExtension(id: string): Promise<void> {
     if (useDb()) {
-      newRebate = await db.insertRebate({
-        student_id: params.studentId,
-        enrollment_no: params.enrollmentNo,
-        student_name: params.studentName,
-        start_date: actualStartKey,
-        end_date: params.endDate,
-        reason: params.reason || 'Official Dining Closure by Munshi',
-        status: 'approved'
-      });
-    } else {
-      newRebate = {
-        id: `reb-close-${Date.now()}`,
-        student_id: params.studentId,
-        enrollment_no: params.enrollmentNo,
-        student_name: params.studentName,
-        start_date: actualStartKey,
-        end_date: params.endDate,
-        reason: params.reason || 'Official Dining Closure by Munshi',
-        status: 'approved',
-        created_at: todayStr
-      };
-      const rebates = await this.getRebateRequests();
-      setLocal(STORAGE_KEY_REBATES, [newRebate, ...rebates]);
+      await db.setExtensionStatus(id, 'cancelled');
+      return;
     }
-
-    return { affectedDays, rebate: newRebate, actualStartDate: actualStartKey };
+    const all = await this.getGraceExtensions();
+    setLocal(STORAGE_KEY_EXTENSIONS, all.map((e) => (e.id === id ? { ...e, status: 'cancelled' as const } : e)));
   },
 
-  // --- SETTINGS ---
+  // --- MENU AND TIMINGS (set by the Munshi, shown to students) ---
+  async getMenu(): Promise<MenuItem[]> {
+    if (useDb()) return safeRead('menu', db.listMenu, []);
+    return getLocal<MenuItem[]>(STORAGE_KEY_MENU, INITIAL_MENU);
+  },
+
+  async saveMenu(items: MenuItem[]): Promise<void> {
+    if (useDb()) {
+      await db.saveMenu(items);
+      return;
+    }
+    setLocal(STORAGE_KEY_MENU, items);
+  },
+
+  async getTimings(): Promise<DiningTiming[]> {
+    if (useDb()) return safeRead('timings', db.listTimings, []);
+    return getLocal<DiningTiming[]>(STORAGE_KEY_TIMINGS, INITIAL_TIMINGS);
+  },
+
+  async saveTimings(timings: DiningTiming[]): Promise<void> {
+    if (useDb()) {
+      await db.saveTimings(timings);
+      return;
+    }
+    setLocal(STORAGE_KEY_TIMINGS, timings);
+  },
+
+  // --- SETTINGS (names only; the rate is fixed at 1400 / 30 per day) ---
   async getSettings(): Promise<MessSettings> {
     if (useDb()) {
       const fromDb = await safeRead<MessSettings | null>('settings', db.getSettings, null);
       return fromDb ?? INITIAL_SETTINGS;
     }
     return getLocal<MessSettings>(STORAGE_KEY_SETTINGS, INITIAL_SETTINGS);
-  },
-
-  async updateSettings(settings: MessSettings): Promise<void> {
-    if (useDb()) {
-      await db.saveSettings(settings);
-      return;
-    }
-    setLocal(STORAGE_KEY_SETTINGS, settings);
   },
 
   // --- FOOD & CLEANLINESS REVIEWS ---
@@ -536,8 +492,7 @@ export const DataService = {
     };
 
     const currentReviews = await this.getFoodReviews();
-    const updated = [newReview, ...currentReviews];
-    setLocal(STORAGE_KEY_REVIEWS, updated);
+    setLocal(STORAGE_KEY_REVIEWS, [newReview, ...currentReviews]);
     return newReview;
   },
 
@@ -550,31 +505,11 @@ export const DataService = {
     const all = await this.getFoodReviews();
     const dayReviews = all.filter((r) => r.date === dateStr);
 
-    const houseList: HostelHouseCode[] = ['HM', 'BH', 'QH', 'KH', 'AK', 'MB'];
-    const initialHouseStats: DailyReviewSummary['house_cleanliness'] = {} as DailyReviewSummary['house_cleanliness'];
-
-    houseList.forEach((code) => {
-      initialHouseStats[code] = {
-        house: code,
-        houseName: HOSTEL_HOUSES[code]?.name || code,
-        averageScore: 0,
-        reviewCount: 0
-      };
+    const houseStats = {} as DailyReviewSummary['house_cleanliness'];
+    const houseSums = {} as Record<HostelHouseCode, { sum: number; count: number }>;
+    HOUSE_CODES.forEach((code) => {
+      houseSums[code] = { sum: 0, count: 0 };
     });
-
-    if (dayReviews.length === 0) {
-      return {
-        date: dateStr,
-        total_reviews: 0,
-        overall_score: 0,
-        quality_score: 0,
-        quantity_score: 0,
-        taste_score: 0,
-        cleanliness_score: 0,
-        house_cleanliness: initialHouseStats,
-        reviews: []
-      };
-    }
 
     let sumQuality = 0;
     let sumQuantity = 0;
@@ -582,50 +517,40 @@ export const DataService = {
     let sumCleanliness = 0;
     let sumOverall = 0;
 
-    const houseScoresMap: Record<HostelHouseCode, { sum: number; count: number }> = {
-      HM: { sum: 0, count: 0 },
-      BH: { sum: 0, count: 0 },
-      QH: { sum: 0, count: 0 },
-      KH: { sum: 0, count: 0 },
-      AK: { sum: 0, count: 0 },
-      MB: { sum: 0, count: 0 }
-    };
-
     dayReviews.forEach((rev) => {
       sumQuality += rev.quality_rating;
       sumQuantity += rev.quantity_rating;
       sumTaste += rev.taste_rating;
       sumCleanliness += rev.cleanliness_rating;
       sumOverall += rev.overall_rating;
-
-      if (houseScoresMap[rev.cleanliness_house]) {
-        houseScoresMap[rev.cleanliness_house].sum += rev.cleanliness_rating;
-        houseScoresMap[rev.cleanliness_house].count += 1;
+      if (houseSums[rev.cleanliness_house]) {
+        houseSums[rev.cleanliness_house].sum += rev.cleanliness_rating;
+        houseSums[rev.cleanliness_house].count += 1;
       }
     });
 
-    const total = dayReviews.length;
-
-    houseList.forEach((code) => {
-      const stats = houseScoresMap[code];
-      const avg = stats.count > 0 ? Number((stats.sum / stats.count).toFixed(1)) : 0;
-      initialHouseStats[code] = {
+    HOUSE_CODES.forEach((code) => {
+      const stats = houseSums[code];
+      houseStats[code] = {
         house: code,
         houseName: HOSTEL_HOUSES[code]?.name || code,
-        averageScore: avg,
+        averageScore: stats.count > 0 ? Number((stats.sum / stats.count).toFixed(1)) : 0,
         reviewCount: stats.count
       };
     });
 
+    const total = dayReviews.length;
+    const avg = (sum: number) => (total > 0 ? Number((sum / total).toFixed(1)) : 0);
+
     return {
       date: dateStr,
       total_reviews: total,
-      overall_score: Number((sumOverall / total).toFixed(1)),
-      quality_score: Number((sumQuality / total).toFixed(1)),
-      quantity_score: Number((sumQuantity / total).toFixed(1)),
-      taste_score: Number((sumTaste / total).toFixed(1)),
-      cleanliness_score: Number((sumCleanliness / total).toFixed(1)),
-      house_cleanliness: initialHouseStats,
+      overall_score: avg(sumOverall),
+      quality_score: avg(sumQuality),
+      quantity_score: avg(sumQuantity),
+      taste_score: avg(sumTaste),
+      cleanliness_score: avg(sumCleanliness),
+      house_cleanliness: houseStats,
       reviews: dayReviews
     };
   },
@@ -639,13 +564,18 @@ export const DataService = {
   // Reset to initial mock data
   resetAllData(): void {
     if (typeof window === 'undefined') return;
-    localStorage.removeItem(STORAGE_KEY_STUDENTS);
-    localStorage.removeItem(STORAGE_KEY_RECORDS);
-    localStorage.removeItem(STORAGE_KEY_BILLS);
-    localStorage.removeItem(STORAGE_KEY_PAYMENTS);
+    [
+      STORAGE_KEY_STUDENTS,
+      STORAGE_KEY_REQUESTS,
+      STORAGE_KEY_PAYMENTS,
+      STORAGE_KEY_ENTRIES,
+      STORAGE_KEY_EXTENSIONS,
+      STORAGE_KEY_MENU,
+      STORAGE_KEY_TIMINGS,
+      STORAGE_KEY_SETTINGS,
+      STORAGE_KEY_REVIEWS,
+      ...OLD_STORAGE_KEYS
+    ].forEach((key) => localStorage.removeItem(key));
     parsedCache.clear();
-    localStorage.removeItem(STORAGE_KEY_REBATES);
-    localStorage.removeItem(STORAGE_KEY_SETTINGS);
-    localStorage.removeItem(STORAGE_KEY_REVIEWS);
   }
 };

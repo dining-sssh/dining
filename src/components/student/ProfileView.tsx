@@ -1,32 +1,35 @@
 'use client';
 
 import React from 'react';
-import { LogOut, Send } from 'lucide-react';
-import { HOSTEL_HOUSES, RebateRequest, Student } from '@/types';
-import { formatDayMonth } from './studentUtils';
+import { LogOut, Send, UtensilsCrossed } from 'lucide-react';
+import { DiningRequest, HOSTEL_HOUSES, Student } from '@/types';
+import { formatLongDate } from './studentUtils';
 
 interface ProfileViewProps {
   student: Student;
-  rebates: RebateRequest[];
-  onApplyRebate: () => void;
+  requests: DiningRequest[];
+  /** Dining is currently off (closed), so the button asks to open it again. */
+  isOff: boolean;
+  onDiningOff: () => void;
+  onDiningOn: () => void;
   onLogout?: () => void;
 }
 
-const REBATE_TONE: Record<RebateRequest['status'], string> = {
+const STATUS_TONE: Record<DiningRequest['status'], string> = {
   pending: 'bg-amber-100 text-amber-800',
   approved: 'bg-emerald-100 text-emerald-800',
   rejected: 'bg-rose-100 text-rose-800'
 };
 
-export const ProfileView: React.FC<ProfileViewProps> = ({ student, rebates, onApplyRebate, onLogout }) => {
+export const ProfileView: React.FC<ProfileViewProps> = ({ student, requests, isOff, onDiningOff, onDiningOn, onLogout }) => {
   const house = HOSTEL_HOUSES[student.house];
-  const sorted = [...rebates].sort((a, b) => b.created_at.localeCompare(a.created_at));
+  const sorted = [...requests].sort((a, b) => b.created_at.localeCompare(a.created_at));
 
   const tiles = [
     { label: 'Hostel house', value: house?.name ?? student.house },
     { label: 'Allotted room', value: `Room ${student.room_no}` },
-    { label: 'Previous room', value: student.previous_room || 'New allotment' },
-    { label: 'Session', value: student.session }
+    { label: 'Previous hostel', value: student.previous_house || '—' },
+    { label: 'Previous room', value: student.previous_room || 'New allotment' }
   ];
 
   return (
@@ -50,27 +53,38 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ student, rebates, onAp
 
       <div className="grid grid-cols-2 gap-3">
         {tiles.map((t) => (
-          <div key={t.label} className="rounded-2xl border border-white/80 bg-white/90 p-3.5 shadow-sm">
+          <div key={t.label} className="rounded-2xl border border-white/80 bg-white p-3.5 shadow-sm">
             <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">{t.label}</p>
             <p className="mt-1 text-sm font-bold text-slate-900">{t.value}</p>
           </div>
         ))}
       </div>
 
-      <section className="rounded-3xl border border-white/80 bg-white/90 p-4 shadow-lg shadow-emerald-950/5">
+      <section className="rounded-3xl border border-white bg-white p-4 shadow-lg shadow-emerald-950/5">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <h3 className="text-base font-bold text-slate-900">Mess off requests</h3>
-            <p className="text-xs text-slate-500">Leave rebate requests and their status</p>
+            <h3 className="text-base font-bold text-slate-900">Dining off / on</h3>
+            <p className="text-xs text-slate-500">Requests go to the Munshi</p>
           </div>
-          <button
-            type="button"
-            onClick={onApplyRebate}
-            className="press flex shrink-0 items-center gap-1.5 rounded-full bg-amber-400 px-4 py-2 text-xs font-bold text-emerald-950 shadow-sm"
-          >
-            <Send className="h-3.5 w-3.5" />
-            Apply
-          </button>
+          {isOff ? (
+            <button
+              type="button"
+              onClick={onDiningOn}
+              className="press flex shrink-0 items-center gap-1.5 rounded-full bg-emerald-900 px-4 py-2 text-xs font-bold text-white shadow-sm"
+            >
+              <Send className="h-3.5 w-3.5" />
+              Request to open
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={onDiningOff}
+              className="press flex shrink-0 items-center gap-1.5 rounded-full bg-amber-400 px-4 py-2 text-xs font-bold text-emerald-950 shadow-sm"
+            >
+              <UtensilsCrossed className="h-3.5 w-3.5" />
+              Dining off
+            </button>
+          )}
         </div>
 
         {sorted.length === 0 ? (
@@ -81,13 +95,13 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ student, rebates, onAp
               <li key={r.id} className="rounded-2xl border border-slate-200 bg-slate-50/70 p-3">
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-xs font-bold text-slate-900">
-                    {formatDayMonth(r.start_date)} – {formatDayMonth(r.end_date)}
+                    {r.kind === 'off' ? 'Dining off' : 'Open dining'} · from {formatLongDate(r.start_date)}
                   </span>
-                  <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase ${REBATE_TONE[r.status]}`}>
+                  <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase ${STATUS_TONE[r.status]}`}>
                     {r.status}
                   </span>
                 </div>
-                <p className="mt-1 text-[11px] text-slate-600">{r.reason}</p>
+                {r.reason && <p className="mt-1 text-[11px] text-slate-600">{r.reason}</p>}
               </li>
             ))}
           </ul>

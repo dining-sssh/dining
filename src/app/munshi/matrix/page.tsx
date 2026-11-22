@@ -1,40 +1,28 @@
 'use client';
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { ChevronLeft, ChevronRight, Printer, Search } from 'lucide-react';
-import { DiningDailyRecord, HostelHouseCode, Student } from '@/types';
-import { DataService } from '@/lib/dataService';
+import { HostelHouseCode } from '@/types';
+import { DayKind, dayInfoFor } from '@/lib/diningEngine';
+import { useAdminData } from '@/components/admin/AdminData';
 import { BTN_GHOST, Card, EmptyState, HouseChips, INPUT, PageHeader } from '@/components/admin/ui';
-import { isEaten, monthLabel, shiftMonth, toDateKey } from '@/components/student/studentUtils';
+import { monthLabel, shiftMonth } from '@/components/student/studentUtils';
 
-const CELL: Record<string, string> = {
-  E: 'bg-emerald-600 text-white',
-  NE: 'bg-rose-200 text-rose-900',
-  R: 'bg-amber-400 text-emerald-950',
-  '·': 'bg-slate-100 text-slate-400',
-  '–': 'bg-white text-slate-300 ring-1 ring-slate-200'
+const CELL: Record<DayKind, { code: string; style: string }> = {
+  eaten: { code: 'E', style: 'bg-emerald-600 text-white' },
+  deficit: { code: 'D', style: 'bg-orange-400 text-orange-950' },
+  off: { code: 'O', style: 'bg-amber-300 text-emerald-950' },
+  stopped: { code: 'S', style: 'bg-rose-300 text-rose-950' },
+  upcoming: { code: '·', style: 'bg-slate-100 text-slate-400' },
+  break: { code: '·', style: 'bg-slate-100 text-slate-400' },
+  before: { code: '–', style: 'bg-white text-slate-300 ring-1 ring-slate-200' }
 };
 
 export default function MunshiMatrixPage() {
-  const todayKey = useMemo(() => toDateKey(new Date()), []);
+  const { students, accounts, todayKey } = useAdminData();
   const [monthKey, setMonthKey] = useState(todayKey.slice(0, 7));
-  const [students, setStudents] = useState<Student[]>([]);
-  const [records, setRecords] = useState<DiningDailyRecord[]>([]);
   const [query, setQuery] = useState('');
   const [house, setHouse] = useState('ALL');
-
-  useEffect(() => {
-    Promise.all([DataService.getStudents(), DataService.getAllDailyRecords()]).then(([st, rec]) => {
-      setStudents(st);
-      setRecords(rec);
-    });
-  }, []);
-
-  const byKey = useMemo(() => {
-    const m = new Map<string, DiningDailyRecord>();
-    records.forEach((r) => m.set(`${r.student_id}_${r.date}`, r));
-    return m;
-  }, [records]);
 
   const [y, m] = monthKey.split('-').map(Number);
   const daysInMonth = new Date(y, m, 0).getDate();
@@ -60,7 +48,7 @@ export default function MunshiMatrixPage() {
     <>
       <PageHeader
         title="Month Matrix"
-        subtitle="E eaten · NE not eaten · R rebate · – no entry · · upcoming"
+        subtitle="E dined · D deficit day · O dining off · S stopped · · no dining"
         actions={
           <button type="button" onClick={() => window.print()} className={BTN_GHOST}>
             <Printer className="h-4 w-4 text-emerald-700" />
@@ -120,28 +108,22 @@ export default function MunshiMatrixPage() {
                       {d}
                     </th>
                   ))}
-                  <th className="min-w-20 border-l border-slate-200 bg-emerald-50 p-2 text-emerald-950">Eaten</th>
+                  <th className="min-w-20 border-l border-slate-200 bg-emerald-50 p-2 text-emerald-950">Dined</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {filtered.map((s) => {
-                  let eaten = 0;
+                  const state = accounts.get(s.id);
+                  let dined = 0;
                   const cells = days.map((d) => {
                     const dateKey = `${monthKey}-${String(d).padStart(2, '0')}`;
-                    const rec = byKey.get(`${s.id}_${dateKey}`);
-                    let code = '–';
-                    if (dateKey > todayKey) code = '·';
-                    else if (rec) {
-                      if (rec.is_rebate) code = 'R';
-                      else if (isEaten(rec)) {
-                        code = 'E';
-                        eaten += 1;
-                      } else code = 'NE';
-                    }
+                    const kind: DayKind = state ? dayInfoFor(state, [], dateKey).kind : 'before';
+                    if (kind === 'eaten' || kind === 'deficit') dined += 1;
+                    const cell = CELL[kind];
                     return (
                       <td key={d} className="p-0.5">
-                        <span className={`inline-flex h-6 w-6 items-center justify-center rounded font-mono text-[10px] font-bold ${CELL[code]}`}>
-                          {code}
+                        <span className={`inline-flex h-6 w-6 items-center justify-center rounded font-mono text-[10px] font-bold ${cell.style}`}>
+                          {cell.code}
                         </span>
                       </td>
                     );
@@ -156,9 +138,7 @@ export default function MunshiMatrixPage() {
                         </div>
                       </td>
                       {cells}
-                      <td className="border-l border-slate-200 bg-emerald-50 p-2 font-mono text-sm font-extrabold text-emerald-950">
-                        {eaten}
-                      </td>
+                      <td className="border-l border-slate-200 bg-emerald-50 p-2 font-mono text-sm font-extrabold text-emerald-950">{dined}</td>
                     </tr>
                   );
                 })}

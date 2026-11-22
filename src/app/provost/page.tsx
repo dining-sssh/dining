@@ -2,49 +2,41 @@
 
 import React from 'react';
 import Link from 'next/link';
-import { ChevronRight, Clock, IndianRupee, Star, TrendingUp, Users } from 'lucide-react';
-import { HOSTEL_HOUSES, HostelHouseCode } from '@/types';
-import { DataService } from '@/lib/dataService';
-import { formatMoney } from '@/lib/billingUtils';
-import { useProvostData } from '@/components/provost/ProvostData';
+import { ChevronRight, Clock, ShieldPlus, Star, Users, Wallet } from 'lucide-react';
+import { HOSTEL_HOUSES, HOUSE_CODES } from '@/types';
+import { formatRupees } from '@/lib/diningEngine';
+import { useAdminData } from '@/components/admin/AdminData';
 import { Card, EmptyState, PageHeader, Pill, StatCard } from '@/components/admin/ui';
-import { formatDayMonth } from '@/components/student/studentUtils';
 
 export default function ProvostOverviewPage() {
-  const { students, bills, rebates, settings, todayReview, totalPendingDues, reload } = useProvostData();
+  const { students, accounts, settings, todayReview, totalPending, totalReceived, activeCount, extensions } = useAdminData();
 
-  const totalDiets = bills.reduce((acc, b) => acc + (b.total_diets || 0), 0);
-  const totalBilled = bills.reduce((acc, b) => acc + (b.total_amount || 0), 0);
-  const pending = rebates.filter((r) => r.status === 'pending');
-
-  const houseCounts = (Object.keys(HOSTEL_HOUSES) as HostelHouseCode[]).map((code) => ({
+  const houseCounts = HOUSE_CODES.map((code) => ({
     code,
     count: students.filter((s) => s.house === code).length
   }));
 
-  const decide = async (id: string, status: 'approved' | 'rejected') => {
-    await DataService.updateRebateStatus(id, status);
-    await reload();
-  };
+  const stopped = students.filter((s) => s.status === 'active' && accounts.get(s.id)?.status === 'stopped');
+  const awaiting = extensions.filter((e) => e.status === 'awaiting_munshi').length;
 
   return (
     <>
       <PageHeader
         title="Provost Dashboard"
-        subtitle={settings ? `${settings.provost_name} · Session ${settings.session}` : 'Hall oversight'}
+        subtitle={settings ? `${settings.provost_name} · Sir Shah Sulaiman Hall` : 'Hall oversight'}
       />
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <StatCard label="Residents" value={students.length} hint="Across all 6 houses" icon={Users} tone="emerald" />
-        <StatCard label="Diets logged" value={totalDiets.toLocaleString('en-IN')} hint="This and earlier sessions" icon={TrendingUp} tone="sky" />
-        <StatCard label="Billed" value={formatMoney(totalBilled)} hint="Diets + fixed + establishment" icon={IndianRupee} tone="slate" />
-        <StatCard label="Pending dues" value={formatMoney(totalPendingDues)} hint="Charged minus deposited" icon={Clock} tone="amber" />
+        <StatCard label="Total pending amount" value={formatRupees(totalPending)} hint="Unpaid deficit of all students" icon={Clock} tone="amber" />
+        <StatCard label="Total received" value={formatRupees(totalReceived)} hint="All deposits (food charges slips)" icon={Wallet} tone="emerald" />
+        <StatCard label="Active dining" value={`${activeCount} / ${students.length}`} hint="Dining running today" icon={Users} tone="sky" />
+        <StatCard label="At the -3 limit" value={stopped.length} hint={`${awaiting} extension${awaiting === 1 ? '' : 's'} with the Munshi`} icon={ShieldPlus} tone="rose" />
       </div>
 
       <div className="grid gap-5 lg:grid-cols-5">
         <Card className="lg:col-span-3">
-          <h2 className="text-sm font-bold text-slate-900">Residents by house</h2>
-          <p className="text-xs text-slate-500">Tap a house to open its students</p>
+          <h2 className="text-sm font-bold text-slate-900">Residents by hostel</h2>
+          <p className="text-xs text-slate-500">Tap a hostel to open its students</p>
           <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
             {houseCounts.map(({ code, count }) => (
               <Link
@@ -65,39 +57,22 @@ export default function ProvostOverviewPage() {
         <div className="space-y-5 lg:col-span-2">
           <Card>
             <div className="flex items-center justify-between">
-              <h2 className="text-sm font-bold text-slate-900">Rebate requests waiting</h2>
-              <Link href="/provost/rebates" className="flex items-center text-xs font-bold text-emerald-800">
-                All <ChevronRight className="h-4 w-4" />
+              <h2 className="text-sm font-bold text-slate-900">Dining stopped at -3</h2>
+              <Link href="/provost/extensions" className="flex items-center text-xs font-bold text-emerald-800">
+                Extensions <ChevronRight className="h-4 w-4" />
               </Link>
             </div>
-            {pending.length === 0 ? (
-              <EmptyState>Nothing waiting for approval.</EmptyState>
+            {stopped.length === 0 ? (
+              <EmptyState>No student has reached the limit.</EmptyState>
             ) : (
-              <ul className="mt-3 space-y-2.5">
-                {pending.slice(0, 3).map((r) => (
-                  <li key={r.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
-                    <p className="text-xs font-bold text-slate-900">
-                      {r.student_name} <span className="font-mono font-semibold text-slate-500">· {r.enrollment_no}</span>
-                    </p>
-                    <p className="text-[11px] text-slate-500">
-                      {formatDayMonth(r.start_date)} – {formatDayMonth(r.end_date)} · {r.reason}
-                    </p>
-                    <div className="mt-2 flex gap-2">
-                      <button
-                        type="button"
-                        onClick={() => decide(r.id, 'approved')}
-                        className="press rounded-full bg-emerald-800 px-4 py-1.5 text-[11px] font-bold text-white"
-                      >
-                        Approve
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => decide(r.id, 'rejected')}
-                        className="press rounded-full bg-rose-600 px-4 py-1.5 text-[11px] font-bold text-white"
-                      >
-                        Reject
-                      </button>
+              <ul className="mt-3 space-y-2">
+                {stopped.slice(0, 4).map((s) => (
+                  <li key={s.id} className="flex items-center justify-between gap-2 rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                    <div className="min-w-0">
+                      <p className="truncate text-xs font-bold text-slate-900">{s.name}</p>
+                      <p className="font-mono text-[11px] text-slate-500">{s.enrollment_no}</p>
                     </div>
+                    <Pill tone="rose">{formatRupees(accounts.get(s.id)?.pendingAmount ?? 0)}</Pill>
                   </li>
                 ))}
               </ul>
