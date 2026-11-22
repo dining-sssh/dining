@@ -32,7 +32,6 @@ function SlipsView() {
   const [studentId, setStudentId] = useState<string | null>(null);
   const [parts, setParts] = useState<string[]>(['']);
   const [settle, setSettle] = useState<string[]>([]);
-  const [bookOverride, setBookOverride] = useState<string | null>(null);
   const [slipOverride, setSlipOverride] = useState<string | null>(null);
   const [paidOn, setPaidOn] = useState(todayKey);
   const [cashierOverride, setCashierOverride] = useState<string | null>(null);
@@ -54,7 +53,6 @@ function SlipsView() {
   const state = student ? accounts.get(student.id) : undefined;
 
   const suggested = useMemo(() => nextSlipNumbers(slips), [slips]);
-  const bookNo = bookOverride ?? suggested.bookNo;
   const slipNo = slipOverride ?? suggested.slipNo;
   const defaultCashier = (settings?.munshi_name ?? '').replace(/\s*\(.*?\)\s*/g, '').trim();
   const cashier = cashierOverride ?? defaultCashier;
@@ -102,7 +100,7 @@ function SlipsView() {
         `The amount is too low. The negative days and the months you ticked need at least ${formatRupees(outcome.minimumAmount)}.`
       );
     }
-    if (!bookNo.trim() || !slipNo.trim()) return setError('Book No. and R. No. are required.');
+    if (!slipNo.trim()) return setError('Slip No. is required.');
     if (!paidOn) return setError('Choose the date.');
     if (paidOn > todayKey) return setError('The date cannot be in the future.');
 
@@ -111,7 +109,7 @@ function SlipsView() {
       const created = await DataService.addPaymentSlip({
         student_id: student.id,
         enrollment_no: student.enrollment_no,
-        book_no: bookNo.trim(),
+        book_no: '1',
         slip_no: slipNo.trim(),
         amount: nums.reduce((a, b) => a + b, 0),
         breakup: nums.length > 1 ? nums : undefined,
@@ -125,7 +123,6 @@ function SlipsView() {
       setStudentId(null);
       setParts(['']);
       setSettle([]);
-      setBookOverride(null);
       setSlipOverride(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not save the slip.');
@@ -136,7 +133,7 @@ function SlipsView() {
 
   const handleDeleteSlip = async (slip: PaymentSlip) => {
     const owner = nameById.get(slip.student_id);
-    const slipLabel = `R. No. ${slip.slip_no} (${formatRupees(slip.amount)}) for ${owner?.name ?? slip.enrollment_no}`;
+    const slipLabel = `Slip No. ${slip.slip_no} (${formatRupees(slip.amount)}) for ${owner?.name ?? slip.enrollment_no}`;
     if (
       !window.confirm(
         `Revoke and delete slip ${slipLabel}?\n\nThis will permanently delete the slip and remove the credited days from the student's dining account.`
@@ -180,7 +177,7 @@ function SlipsView() {
         <div className="fade-enter flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-3">
           <p className="flex items-center gap-2 text-xs font-bold text-emerald-900">
             <CheckCircle2 className="h-4 w-4" />
-            Slip R. No. {issued.slip.slip_no} for {issued.student.name} saved ({formatRupees(issued.slip.amount)}).
+            Slip No. {issued.slip.slip_no} for {issued.student.name} saved ({formatRupees(issued.slip.amount)}).
           </p>
           <div className="flex items-center gap-2">
             <button
@@ -358,11 +355,8 @@ function SlipsView() {
 
           <Card className="space-y-4">
             <h2 className="text-sm font-bold text-slate-900">3. Slip details</h2>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Label text="Book No.">
-                <input value={bookNo} onChange={(e) => setBookOverride(e.target.value)} className={`${INPUT} font-mono`} />
-              </Label>
-              <Label text="R. No.">
+            <div className="grid gap-4 sm:grid-cols-3">
+              <Label text="Slip No.">
                 <input value={slipNo} onChange={(e) => setSlipOverride(e.target.value)} className={`${INPUT} font-mono`} />
               </Label>
               <Label text="Date">
@@ -396,7 +390,7 @@ function SlipsView() {
             <Search className="pointer-events-none absolute left-3.5 top-3.5 h-4 w-4 text-emerald-700" />
             <input
               type="search"
-              placeholder="R. No., enrollment or name"
+              placeholder="Slip No., enrollment or name"
               value={recentQuery}
               onChange={(e) => setRecentQuery(e.target.value)}
               className={`${INPUT} pl-10`}
@@ -421,7 +415,7 @@ function SlipsView() {
                       <span className="min-w-0 flex-1">
                         <span className="block truncate text-xs font-bold text-slate-900">{owner?.name ?? s.enrollment_no}</span>
                         <span className="block truncate text-[11px] text-slate-500">
-                          R. No. <span className="font-mono font-semibold">{s.slip_no}</span> · {formatDMY(s.paid_on)}
+                          Slip No. <span className="font-mono font-semibold">{s.slip_no}</span> · {formatDMY(s.paid_on)}
                         </span>
                       </span>
                       <Pill tone="emerald">{formatRupees(s.amount)}</Pill>
@@ -431,7 +425,7 @@ function SlipsView() {
                       disabled={isDeleting}
                       onClick={() => handleDeleteSlip(s)}
                       title="Revoke slip"
-                      aria-label={`Revoke slip R. No. ${s.slip_no}`}
+                      aria-label={`Revoke slip No. ${s.slip_no}`}
                       className="press rounded-full p-2 text-slate-400 hover:bg-rose-50 hover:text-rose-600 active:bg-rose-100 disabled:opacity-40"
                     >
                       <Trash2 className="h-4 w-4" />

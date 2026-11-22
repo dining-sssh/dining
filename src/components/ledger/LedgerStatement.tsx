@@ -65,7 +65,7 @@ export const LedgerStatement: React.FC<LedgerStatementProps> = ({ state, slips, 
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-xs font-bold text-slate-900">
-                      Deposit · R. No. {s.slip_no}
+                      Deposit · Slip No. {s.slip_no}
                     </span>
                     <span className="block truncate text-[11px] text-slate-500">
                       {formatDMY(s.paid_on)}

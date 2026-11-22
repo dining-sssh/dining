@@ -41,7 +41,7 @@ export function rupeesInWords(amount: number): string {
   return `${parts.join(' ')} Rupees Only`;
 }
 
-/** Suggested Book No. and R. No. for the next slip: one more than the highest R. No. issued so far. */
+/** Suggested Slip No. for the next slip: one more than the highest Slip No. issued so far. */
 export function nextSlipNumbers(slips: PaymentSlip[]): { bookNo: string; slipNo: string } {
   let top: PaymentSlip | null = null;
   slips.forEach((s) => {

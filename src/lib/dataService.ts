@@ -354,7 +354,7 @@ export const DataService = {
 
     const all = await this.getPaymentSlips();
     if (all.some(s => s.slip_no === slip.slip_no)) {
-      throw new Error(`R. No. ${slip.slip_no} has already been used.`);
+      throw new Error(`Slip No. ${slip.slip_no} has already been used.`);
     }
     const created: PaymentSlip = { ...slip, id: `slip-${Date.now()}-${slip.slip_no}` };
     setLocal(STORAGE_KEY_PAYMENTS, [...all, created]);

@@ -132,7 +132,7 @@ export async function insertSlip(slip: Omit<PaymentSlip, 'id'>): Promise<Payment
     .select()
     .single();
   if (error) {
-    if (error.code === '23505') throw new Error(`R. No. ${slip.slip_no} has already been used.`);
+    if (error.code === '23505') throw new Error(`Slip No. ${slip.slip_no} has already been used.`);
     throw new Error(error.message);
   }
   return toSlip(data);

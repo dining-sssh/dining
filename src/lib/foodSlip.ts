@@ -118,19 +118,13 @@ export function renderFoodSlip({ slip, student }: SlipData): HTMLCanvasElement {
   ctx.font = `bold 40px ${PRINT_FONT}`;
   ctx.fillText('DUPLICATE', W / 2, 120);
 
-  // Book No. / R. No.
-  const bw = label(ctx, 'Book No.', 90, 200);
-  dotted(ctx, 90 + bw + 4, 470, 204);
+  // Slip No. (formerly Book No., with R. No. removed)
+  const sw = label(ctx, 'Slip No.', 90, 200);
+  dotted(ctx, 90 + sw + 4, 520, 204);
   ctx.fillStyle = PRINT;
   ctx.font = `bold 46px ${PRINT_FONT}`;
   ctx.textAlign = 'left';
-  ctx.fillText(slip.book_no, 90 + bw + 24, 200);
-
-  const rw = label(ctx, 'R. No.', 740, 200);
-  dotted(ctx, 740 + rw + 4, 1110, 204);
-  ctx.fillStyle = PRINT;
-  ctx.font = `bold 46px ${PRINT_FONT}`;
-  ctx.fillText(slip.slip_no, 740 + rw + 24, 200);
+  ctx.fillText(slip.slip_no, 90 + sw + 24, 200);
 
   // Title
   ctx.textAlign = 'center';

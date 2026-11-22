@@ -49,7 +49,7 @@ export const MunshiExcelLedger: React.FC = () => {
 
   const handleDeleteSlip = async (slip: PaymentSlip) => {
     if (!selected) return;
-    const slipLabel = `R. No. ${slip.slip_no} (${formatRupees(slip.amount)}) for ${selected.name}`;
+    const slipLabel = `Slip No. ${slip.slip_no} (${formatRupees(slip.amount)}) for ${selected.name}`;
     if (
       !window.confirm(
         `Revoke and delete slip ${slipLabel}?\n\nThis will permanently delete the slip and remove the credited days from the student's dining account.`

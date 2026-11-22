@@ -51,7 +51,7 @@ export const SlipModal: React.FC<SlipModalProps> = ({ data, onClose, onDelete })
           <div>
             <h3 className="text-sm font-bold text-slate-900">Food Charges Slip</h3>
             <p className="text-[11px] text-slate-500">
-              R. No. {data.slip.slip_no} · Book {data.slip.book_no}
+              Slip No. {data.slip.slip_no}
             </p>
           </div>
           <button
