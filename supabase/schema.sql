@@ -96,6 +96,16 @@ create table if not exists public.payment_slips (
   created_at    timestamptz not null default now()
 );
 alter table public.payment_slips add column if not exists settled_months text[];
+-- A payment is a printed slip, an online payment, or an old balance moved over ('adjustment').
+alter table public.payment_slips add column if not exists mode text not null default 'slip';
+alter table public.payment_slips add column if not exists note text;
+alter table public.payment_slips drop constraint if exists payment_slips_mode_check;
+alter table public.payment_slips add constraint payment_slips_mode_check check (mode in ('slip', 'online', 'adjustment'));
+alter table public.payment_slips alter column book_no set default '1';
+-- The old registers repeat a slip number for two students, so a number is unique per student.
+-- The app still refuses a new slip whose number is already used by anyone.
+alter table public.payment_slips drop constraint if exists payment_slips_slip_no_key;
+create unique index if not exists payment_slips_slip_student_key on public.payment_slips (slip_no, enrollment_no);
 create index if not exists idx_slips_enrollment on public.payment_slips (enrollment_no);
 
 -- 5. CARRIED DEFICITS (money still owed from the old register, month by month)
@@ -139,6 +149,12 @@ create table if not exists public.dining_timings (
   start_time time not null,
   end_time   time not null,
   updated_at timestamptz not null default now()
+);
+
+-- 7b. HALL CLOSED DAYS (CLOSE, Sir Syed Day...): nobody is charged for these dates
+create table if not exists public.hall_closed_days (
+  day    date primary key,
+  reason text not null default 'Hall closed'
 );
 
 -- 8. NAMES (the daily rate is fixed in the app at 1400 / 30)
@@ -219,6 +235,7 @@ grant select, insert, update, delete on public.deficit_entries to authenticated;
 grant select, insert, update, delete on public.grace_extensions to authenticated;
 grant select, insert, update, delete on public.dining_menu     to authenticated;
 grant select, insert, update, delete on public.dining_timings  to authenticated;
+grant select, insert, update, delete on public.hall_closed_days to authenticated;
 grant select, insert, update, delete on public.mess_settings   to authenticated;
 grant select, insert, update, delete on public.food_reviews    to authenticated;
 
@@ -234,7 +251,7 @@ grant execute on function public.my_student_id() to authenticated;
 -- own rows. Provost and Munshi (rows in staff_users) can manage the records,
 -- with these exceptions:
 --   * only the Provost can approve a grace extension (the Munshi then applies it)
---   * only the Provost can delete slips and reviews
+--   * only the Provost can delete reviews
 -- =============================================================================
 alter table public.staff_users      enable row level security;
 alter table public.students         enable row level security;
@@ -244,6 +261,7 @@ alter table public.deficit_entries  enable row level security;
 alter table public.grace_extensions enable row level security;
 alter table public.dining_menu      enable row level security;
 alter table public.dining_timings   enable row level security;
+alter table public.hall_closed_days enable row level security;
 alter table public.mess_settings    enable row level security;
 alter table public.food_reviews     enable row level security;
 
@@ -317,6 +335,13 @@ drop policy if exists timings_read on public.dining_timings;
 create policy timings_read on public.dining_timings for select to authenticated using (true);
 drop policy if exists timings_write on public.dining_timings;
 create policy timings_write on public.dining_timings for all to authenticated
+  using (public.is_staff()) with check (public.is_staff());
+
+-- hall closed days: everyone logged in reads (they change the balance), staff write
+drop policy if exists closed_read on public.hall_closed_days;
+create policy closed_read on public.hall_closed_days for select to authenticated using (true);
+drop policy if exists closed_write on public.hall_closed_days;
+create policy closed_write on public.hall_closed_days for all to authenticated
   using (public.is_staff()) with check (public.is_staff());
 
 -- settings (names): everyone logged in can read, Provost changes

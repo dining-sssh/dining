@@ -5,6 +5,7 @@ import { AlertCircle, ChevronDown, ChevronRight, Edit2, FileSpreadsheet, Printer
 import { PaymentSlip, Student } from '@/types';
 import { DataService } from '@/lib/dataService';
 import { DAILY_RATE, DayInfo, DayKind, dayInfoFor, formatDays, formatRupees } from '@/lib/diningEngine';
+import { isPrintableSlip, paymentLabel } from '@/lib/billingUtils';
 import { SlipData } from '@/lib/foodSlip';
 import { useAdminData } from '@/components/admin/AdminData';
 import { SlipModal } from '@/components/student/SlipModal';
@@ -31,6 +32,7 @@ const CELL: Record<DayKind, { code: string; style: string }> = {
   deficit: { code: 'D', style: 'bg-orange-300 text-orange-950' },
   off: { code: 'O', style: 'bg-amber-200 text-amber-950' },
   stopped: { code: 'S', style: 'bg-[#ffc7ce] text-[#9c0006]' },
+  closed: { code: 'C', style: 'bg-sky-100 text-sky-800' },
   upcoming: { code: '·', style: 'bg-slate-100 text-slate-300' },
   break: { code: '·', style: 'bg-slate-100 text-slate-300' },
   before: { code: '·', style: 'bg-white text-slate-300' }
@@ -487,18 +489,24 @@ export const MunshiExcelLedger: React.FC = () => {
                         <div className="flex flex-col gap-0.5">
                           {row.slips.length === 0
                             ? '—'
-                            : row.slips.map((s) => (
-                                <button
-                                  key={s.id}
-                                  type="button"
-                                  disabled={!selected}
-                                  onClick={() => selected && setPreview({ slip: s, student: selected })}
-                                  title="Open this slip"
-                                  className="press font-semibold text-sky-800 underline decoration-dotted underline-offset-2"
-                                >
-                                  {s.book_no}/{s.slip_no}
-                                </button>
-                              ))}
+                            : row.slips.map((s) =>
+                                isPrintableSlip(s) ? (
+                                  <button
+                                    key={s.id}
+                                    type="button"
+                                    disabled={!selected}
+                                    onClick={() => selected && setPreview({ slip: s, student: selected })}
+                                    title="Open this slip"
+                                    className="press font-semibold text-sky-800 underline decoration-dotted underline-offset-2"
+                                  >
+                                    {s.book_no}/{s.slip_no}
+                                  </button>
+                                ) : (
+                                  <span key={s.id} className="font-semibold text-slate-600" title={s.note ?? undefined}>
+                                    {s.mode === 'online' ? 'ONLINE' : 'ADJUST'}
+                                  </span>
+                                )
+                              )}
                         </div>
                       </td>
                       <td className="border-r border-slate-300 bg-white p-1 font-mono text-slate-700">
@@ -579,7 +587,7 @@ export const MunshiExcelLedger: React.FC = () => {
         </div>
 
         <p className="no-print mt-3 text-[11px] text-slate-500">
-          <b>1</b> dined · <b>D</b> dined on a deficit day · <b>O</b> dining off · <b>S</b> dining stopped (grace used up) ·{' '}
+          <b>1</b> dined · <b>D</b> dined on a deficit day · <b>O</b> dining off · <b>S</b> dining stopped (grace used up) · <b>C</b> hall closed ·{' '}
           <b>·</b> no dining that day. Click a month to see its deficit day by day. This sheet is read only; payments are added with{' '}
           <b>Cut Slip</b>.
         </p>

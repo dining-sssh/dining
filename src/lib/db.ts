@@ -5,6 +5,7 @@ import {
   DiningTiming,
   FoodReview,
   GraceExtension,
+  HallClosedDay,
   MenuItem,
   MessSettings,
   PaymentSlip,
@@ -121,6 +122,15 @@ export async function listSlips(opts: { enrollmentNo?: string } = {}): Promise<P
 }
 
 export async function insertSlip(slip: Omit<PaymentSlip, 'id'>): Promise<PaymentSlip> {
+  // The same slip number may appear for two students in old records, but a new slip must be unique.
+  const { data: taken, error: lookupError } = await client()
+    .from('payment_slips')
+    .select('id')
+    .eq('slip_no', slip.slip_no)
+    .limit(1);
+  fail(lookupError);
+  if (taken && taken.length > 0) throw new Error(`R. No. ${slip.slip_no} has already been used.`);
+
   const { data, error } = await client()
     .from('payment_slips')
     .insert({
@@ -140,6 +150,24 @@ export async function insertSlip(slip: Omit<PaymentSlip, 'id'>): Promise<Payment
 
 export async function deleteSlip(id: string): Promise<void> {
   const { error } = await client().from('payment_slips').delete().eq('id', id);
+  fail(error);
+}
+
+/* ---------------------------- hall closed days ---------------------------- */
+
+export async function listClosedDays(): Promise<HallClosedDay[]> {
+  const { data, error } = await client().from('hall_closed_days').select('day, reason').order('day');
+  fail(error);
+  return (data ?? []) as HallClosedDay[];
+}
+
+export async function insertClosedDay(row: HallClosedDay): Promise<void> {
+  const { error } = await client().from('hall_closed_days').upsert(row, { onConflict: 'day' });
+  fail(error);
+}
+
+export async function removeClosedDay(day: string): Promise<void> {
+  const { error } = await client().from('hall_closed_days').delete().eq('day', day);
   fail(error);
 }
 

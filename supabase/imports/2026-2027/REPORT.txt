@@ -1,0 +1,123 @@
+Session 2026-2027
+Students: 783 (without attendance: 3)
+Hall closed days: 2026-09-09 Hall closed; 2026-10-18 Sir Syed Day
+Attendance ends: 2026-11-20
+Requests: 2056
+Payments: 1723 {"slip":1635,"online":17,"adjustment":71}, total Rs 4299746.7
+Slip numbers used more than once: 18
+Students needing grace extensions: 128 (152 rows)
+Students whose monthly eaten days match the sheet exactly: 783 / 783
+Eaten on a hall-closed day (counted as closed): 0
+
+Month mismatches (sheet days vs app): 0
+
+Sheet "Eaten" column differs from the marked days: 1
+  GQ1557 (row 574) 2026-09: Eaten column says 35, days marked = 25
+
+Names repaired (house-code dots removed): 69
+  Row 25: ASHAR AH.M.AD -> ASHAR AHMAD
+  Row 38: HAMZA K.H.AN -> HAMZA KHAN
+  Row 53: DANISH AH.M.AD -> DANISH AHMAD
+  Row 56: SHUAIB AK.H.TAR -> SHUAIB AKHTAR
+  Row 57: SARFRAZ AH.M.AD -> SARFRAZ AHMAD
+  Row 71: AAKIB IKRAR K.H.AN -> AAKIB IKRAR KHAN
+  Row 81: MUJEEM K.H.AN -> MUJEEM KHAN
+  Row 87: MOHD SHEEZAN K.H.AN -> MOHD SHEEZAN KHAN
+  Row 88: MD.ASHIF RAZA SHEK.H. -> MD.ASHIF RAZA SHEKH
+  Row 128: MOHD AH.M.AD ASNARI -> MOHD AHMAD ASNARI
+  Row 134: MOHD AFFAN AH.M.AD -> MOHD AFFAN AHMAD
+  Row 135: MOHD YUSUF K.H.AN -> MOHD YUSUF KHAN
+  Row 138: ADIL K.H.AN -> ADIL KHAN
+  Row 142: FARHAN A.K.HTAR -> FARHAN AKHTAR
+  Row 144: ARSH AZAM K.H.AN -> ARSH AZAM KHAN
+  Row 156: HAMMAD ASLAM K.H.AN -> HAMMAD ASLAM KHAN
+  Row 160: UMAR K.H.URSHID -> UMAR KHURSHID
+  Row 165: AMIRUZZAMAN K.H.AN -> AMIRUZZAMAN KHAN
+  Row 168: ARMAN K.H.AN -> ARMAN KHAN
+  Row 169: NAJEEB AH.M.AD -> NAJEEB AHMAD
+  Row 175: MATEEN AH.M.AD -> MATEEN AHMAD
+  Row 177: SHAHRUK.H. MOJIB (PH) -> SHAHRUKH MOJIB (PH)
+  Row 179: IBRAHIM K.H.AN -> IBRAHIM KHAN
+  Row 184: SYED OWAIS AH.M.AD -> SYED OWAIS AHMAD
+  Row 191: MD.NUMAN K.H.AN -> MD.NUMAN KHAN
+  Row 192: MD.SALMAN K.H.AN -> MD.SALMAN KHAN
+  Row 199: ABDULLAH RASHID K.H.AN -> ABDULLAH RASHID KHAN
+  Row 202: IRSHAD K.H.AN -> IRSHAD KHAN
+  Row 254: MD ARSALAN K.H.AN -> MD ARSALAN KHAN
+  Row 255: MD.SHAHZEB K.H.AN -> MD.SHAHZEB KHAN
+  Row 265: MD.SAJID AH.M.AD -> MD.SAJID AHMAD
+  Row 267: AFFAN AH.M.AD -> AFFAN AHMAD
+  Row 269: YASIR MAH.M.OOD -> YASIR MAHMOOD
+  Row 273: ASHIF K.H.AN -> ASHIF KHAN
+  Row 282: FAIZAN K.H.AN -> FAIZAN KHAN
+  Row 285: FAIZAN K.H.AN -> FAIZAN KHAN
+  Row 291: MOHD IZHAN K.H.AN -> MOHD IZHAN KHAN
+  Row 295: REHAN SHAIK.H. -> REHAN SHAIKH
+  Row 297: HILAL AH.M.AD SHEIK.H. -> HILAL AHMAD SHEIKH
+  Row 308: BELAL AH.M.AD KIDWAI -> BELAL AHMAD KIDWAI
+  Row 350: KABIR K.H.AN -> KABIR KHAN
+  Row 352: NISHAT AH.M.AD -> NISHAT AHMAD
+  Row 356: AAMIR K.H.AN -> AAMIR KHAN
+  Row 363: FAIZ AH.M.AD -> FAIZ AHMAD
+  Row 397: AMAN AH.M.AD -> AMAN AHMAD
+  Row 401: WASI AH.M.AD -> WASI AHMAD
+  Row 434: ABU TALHA K.H.AN -> ABU TALHA KHAN
+  Row 442: ABID SHAFI K.H.AN -> ABID SHAFI KHAN
+  Row 464: KABIR AK.H.TAR -> KABIR AKHTAR
+  Row 485: ARBAZ AH.M.ED -> ARBAZ AHMED
+  Row 493: LUQMAN AH.M.AD -> LUQMAN AHMAD
+  Row 511: MOHD AYAN K.H.AN -> MOHD AYAN KHAN
+  Row 512: AARIF K.HAN -> AARIF KHAN
+  Row 515: KALEEM AH.M.AD -> KALEEM AHMAD
+  Row 517: MOHAMMAD DANISH K.H.AN -> MOHAMMAD DANISH KHAN
+  Row 520: ARQAM AH.M.AD -> ARQAM AHMAD
+  Row 523: NISHAD AK.H.TER -> NISHAD AKHTER
+  Row 539: MOHAMMAD SHARIF K.H.AN -> MOHAMMAD SHARIF KHAN
+  Row 590: MUHAMMAD ABDULLAH K.H.AN -> MUHAMMAD ABDULLAH KHAN
+  Row 596: MD.FAISAL AK.H.TAR -> MD.FAISAL AKHTAR
+  Row 601: WAQUAR AH.M.AD -> WAQUAR AHMAD
+  Row 604: MOHAMMAD KAIF K.H.AN -> MOHAMMAD KAIF KHAN
+  Row 626: KASHIF SHAIK.H. -> KASHIF SHAIKH
+  Row 685: MOHD FAIZAN K.H.AN -> MOHD FAIZAN KHAN
+  Row 695: SAHIL K.H.AN -> SAHIL KHAN
+  Row 719: FIROZ K.H.AN -> FIROZ KHAN
+  Row 726: ARBAB AH.M.AD -> ARBAB AHMAD
+  Row 728: MOHD ZUHAIR AH.M.AD -> MOHD ZUHAIR AHMAD
+  Row 766: SHAHNAWAZ K.H.AN -> SHAHNAWAZ KHAN
+
+Warnings: 31
+  Row 26 GK7272 2026-09: 2 slips in one cell ("148/14756 149/14850", Rs 2240), saved as one payment
+  Row 41 GP7143 2026-09: slip date "28sp" read as day 28 of the month
+  Row 57 GN2875 2026-10: 2 slips in one cell ("150/14970 153/15256", Rs 2100), saved as one payment
+  Row 139 GM6372 2026-08: 2 slips in one cell ("143/14225 148/14722", Rs 2800), saved as one payment
+  Row 169 GL4356 2026-09: slip date missing or unreadable (""), used 2026-09-01
+  Row 211 GP6961 2026-10: slip date missing or unreadable (""), used 2026-10-01
+  Row 239 GQ6349 2026-08: 2 slips in one cell ("146/14574 148/14710", Rs 8000), saved as one payment
+  Row 306 GM8292 2026-11: slip date "12" read as day 12 of the month
+  Row 342 GQ6356 2026-10: 2 slips in one cell ("150/14919 152/15142", Rs 2000), saved as one payment
+  Row 392 GM7412 2026-08: slip date missing or unreadable (""), used 2026-08-01
+  Row 431 GM1678 2026-10: slip date missing or unreadable (""), used 2026-10-01
+  Row 444 GP8286 2026-10: 2 slips in one cell ("151/15079 154/15309", Rs 2460), saved as one payment
+  Row 464 GN8702 2026-11: slip date "16V" read as day 16 of the month
+  Row 466 GQ0342 2026-10: 2 slips in one cell ("150/15000 154/15312", Rs 3395), saved as one payment
+  Row 482 GR8335 2026-08: slip date missing or unreadable (""), used 2026-08-01
+  Row 494 GQ9505 2026-10: slip date "13" read as day 13 of the month
+  Row 503 GM4243 2026-11: negative amount -1400 ("BAL ADDED TO GM4210") kept as a remark only
+  Row 504 GM4210 2026-10: slip date missing or unreadable (""), used 2026-10-01
+  Row 506 GN3486 2026-09: negative amount -700 ("BAL ADDED TO GM4243") kept as a remark only
+  Row 510 GQ2759 2026-09: 2 slips in one cell ("148/14786 149/14852", Rs 2585), saved as one payment
+  Row 510 GQ2759 2026-10: slip date "311OCT" read as day 31 of the month
+  Row 529 GJ6528 2026-10: 2 slips in one cell ("150/14968 152/15165", Rs 2460), saved as one payment
+  Row 574 GQ1557 2026-09-04: value 11 treated as 1
+  Row 642 GP0884 2026-10: 2 slips in one cell ("151/15073, 153/15229", Rs 11760), saved as one payment
+  Row 663 GL4444 2026-10: 2 slips in one cell ("282/28155,152/15132", Rs 2460), saved as one payment
+  Row 681 GR5187 2026-09: slip date missing or unreadable (""), used 2026-09-01
+  Row 682 GR5172 2026-10: 2 slips in one cell ("149/14859 152/15155", Rs 1000), saved as one payment
+  Row 684 GR5180 2026-08: slip date missing or unreadable (""), used 2026-08-01
+  Row 746 GL4226 2026-09: 2 slips in one cell ("282/28109 148/14761", Rs 4200), saved as one payment
+  Row 760 GQ2588 2026-11: 2 slips in one cell ("157/15642 157/15660", Rs 2512), saved as one payment
+  Row 784 GQ6364 2026-10: 2 slips in one cell ("151/15080 282/28182", Rs 3000), saved as one payment
+
+Eaten on closed day:
+
+Files: 01_students.sql, 02_closed_days.sql, 03_requests_01of03.sql, 03_requests_02of03.sql, 03_requests_03of03.sql, 04_slips_01of03.sql, 04_slips_02of03.sql, 04_slips_03of03.sql, 05_extensions.sql

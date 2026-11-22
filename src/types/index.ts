@@ -118,6 +118,9 @@ export interface DeficitEntry {
   created_at: string;
 }
 
+/** How a payment reached the hall. Only a real food charges slip can be printed. */
+export type PaymentMode = 'slip' | 'online' | 'adjustment';
+
 /** A "Food Charges Slip": one deposit made by a student at the dining office. */
 export interface PaymentSlip {
   id: string;
@@ -131,6 +134,16 @@ export interface PaymentSlip {
   settled_months?: string[];
   paid_on: string; // YYYY-MM-DD
   cashier?: string;
+  /** 'slip' (default) = paper slip, 'online' = paid online, 'adjustment' = old balance moved over. */
+  mode?: PaymentMode;
+  /** Free note, for example what the sheet said instead of a slip number. */
+  note?: string | null;
+}
+
+/** A day the whole hall is closed (for example Sir Syed Day). Nobody is charged for it. */
+export interface HallClosedDay {
+  day: string; // YYYY-MM-DD
+  reason: string;
 }
 
 /** Provost's approval to keep dining beyond the normal -3 day limit. The Munshi applies it. */

@@ -8,6 +8,7 @@ import {
   PaymentSlip,
   DeficitEntry,
   GraceExtension,
+  HallClosedDay,
   MenuItem,
   DiningTiming,
   FoodReview
@@ -55,6 +56,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({ enforcedStudentId,
   const [slips, setSlips] = useState<PaymentSlip[]>([]);
   const [entries, setEntries] = useState<DeficitEntry[]>([]);
   const [extensions, setExtensions] = useState<GraceExtension[]>([]);
+  const [closedDays, setClosedDays] = useState<HallClosedDay[]>([]);
   const [menu, setMenu] = useState<MenuItem[]>([]);
   const [timings, setTimings] = useState<DiningTiming[]>([]);
   const [reviews, setReviews] = useState<FoodReview[]>([]);
@@ -82,11 +84,12 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({ enforcedStudentId,
   const latestLoad = useRef(0);
   const loadStudentData = useCallback(async (student: Student) => {
     const token = ++latestLoad.current;
-    const [allRequests, studentSlips, allEntries, allExtensions, menuItems, timingList, allReviews] = await Promise.all([
+    const [allRequests, studentSlips, allEntries, allExtensions, closed, menuItems, timingList, allReviews] = await Promise.all([
       DataService.getDiningRequests(),
       DataService.getPaymentSlipsForStudent(student.enrollment_no),
       DataService.getDeficitEntries(),
       DataService.getGraceExtensions(),
+      DataService.getClosedDays(),
       DataService.getMenu(),
       DataService.getTimings(),
       DataService.getFoodReviews()
@@ -97,6 +100,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({ enforcedStudentId,
     setSlips(studentSlips);
     setEntries(allEntries.filter((e) => e.student_id === student.id));
     setExtensions(allExtensions.filter((e) => e.student_id === student.id));
+    setClosedDays(closed);
     setMenu(menuItems);
     setTimings(timingList);
     setReviews(allReviews);
@@ -111,9 +115,17 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({ enforcedStudentId,
   const state = useMemo(
     () =>
       activeStudent
-        ? simulateAccount({ student: activeStudent, requests, slips, extensions, entries, todayKey })
+        ? simulateAccount({
+            student: activeStudent,
+            requests,
+            slips,
+            extensions,
+            entries,
+            closedDates: closedDays.map((c) => c.day),
+            todayKey
+          })
         : null,
-    [activeStudent, requests, slips, extensions, entries, todayKey]
+    [activeStudent, requests, slips, extensions, entries, closedDays, todayKey]
   );
   const resolve = useCallback(
     (date: string) => dayInfoFor(state!, requests, date),

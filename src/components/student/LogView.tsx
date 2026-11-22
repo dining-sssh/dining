@@ -19,6 +19,7 @@ const DOT: Record<DayKind, string> = {
   deficit: 'bg-orange-300 text-orange-950 ring-1 ring-orange-500',
   off: 'bg-amber-200 text-amber-950 ring-1 ring-amber-400',
   stopped: 'bg-rose-400 text-white ring-1 ring-rose-500',
+  closed: 'bg-sky-100 text-sky-800 ring-1 ring-sky-300',
   upcoming: 'bg-white text-slate-500 ring-1 ring-slate-300',
   break: 'bg-slate-100 text-slate-400',
   before: 'bg-transparent text-slate-300'
@@ -222,7 +223,7 @@ const MonthDays: React.FC<{ monthKey: string; todayKey: string; resolve: (d: str
         })}
       </div>
       <p className="mt-3 text-center text-[11px] text-slate-500">
-        Green = dined · Orange = deficit day · Amber = off · Red = stopped
+        Green = dined · Orange = deficit day · Amber = off · Red = stopped · Blue = hall closed
       </p>
     </div>
   );

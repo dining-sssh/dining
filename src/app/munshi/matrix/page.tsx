@@ -13,6 +13,7 @@ const CELL: Record<DayKind, { code: string; style: string }> = {
   deficit: { code: 'D', style: 'bg-orange-400 text-orange-950' },
   off: { code: 'O', style: 'bg-amber-300 text-emerald-950' },
   stopped: { code: 'S', style: 'bg-rose-300 text-rose-950' },
+  closed: { code: 'C', style: 'bg-sky-100 text-sky-800' },
   upcoming: { code: '·', style: 'bg-slate-100 text-slate-400' },
   break: { code: '·', style: 'bg-slate-100 text-slate-400' },
   before: { code: '–', style: 'bg-white text-slate-300 ring-1 ring-slate-200' }
@@ -48,7 +49,7 @@ export default function MunshiMatrixPage() {
     <>
       <PageHeader
         title="Month Matrix"
-        subtitle="E dined · D deficit day · O dining off · S stopped · · no dining"
+        subtitle="E dined · D deficit day · O dining off · S stopped · C hall closed · · no dining"
         actions={
           <button type="button" onClick={() => window.print()} className={BTN_GHOST}>
             <Printer className="h-4 w-4 text-emerald-700" />

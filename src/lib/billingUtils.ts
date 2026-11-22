@@ -41,14 +41,30 @@ export function rupeesInWords(amount: number): string {
   return `${parts.join(' ')} Rupees Only`;
 }
 
-/** Suggested Slip No. for the next slip: one more than the highest Slip No. issued so far. */
+/**
+ * Suggested Slip No. for the next slip. Slip numbers look like "157/15692" (book/number) or just
+ * "15692"; the suggestion is the highest one issued so far, plus one on the last number.
+ */
 export function nextSlipNumbers(slips: PaymentSlip[]): { bookNo: string; slipNo: string } {
-  let top: PaymentSlip | null = null;
+  let best: { prefix: string; book: number; serial: number } | null = null;
   slips.forEach((s) => {
-    if (!top || Number(s.slip_no) > Number(top.slip_no)) top = s;
+    const m = /^(?:(\d+)\/)?(\d+)$/.exec(String(s.slip_no).trim());
+    if (!m) return; // online payments and adjustments have no slip number
+    const book = m[1] ? Number(m[1]) : 0;
+    const serial = Number(m[2]);
+    if (!best || serial > best.serial || (serial === best.serial && book > best.book)) {
+      best = { prefix: m[1] ? `${m[1]}/` : '', book, serial };
+    }
   });
-  const last = top as PaymentSlip | null;
-  return last
-    ? { bookNo: last.book_no, slipNo: String((Number(last.slip_no) || 0) + 1) }
-    : { bookNo: '1', slipNo: '1' };
+  const top = best as { prefix: string; book: number; serial: number } | null;
+  return top ? { bookNo: '1', slipNo: `${top.prefix}${top.serial + 1}` } : { bookNo: '1', slipNo: '1' };
+}
+/** Only a real food charges slip can be printed. Online payments and adjustments have no slip. */
+export const isPrintableSlip = (s: PaymentSlip): boolean => !s.mode || s.mode === 'slip';
+
+/** What to call a payment on screen. */
+export function paymentLabel(s: PaymentSlip): string {
+  if (isPrintableSlip(s)) return `Slip No. ${s.slip_no}`;
+  if (s.mode === 'online') return 'Online payment';
+  return s.note ? `Adjustment · ${s.note}` : 'Balance adjustment';
 }

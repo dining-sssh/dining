@@ -6,7 +6,7 @@
 -- Provost and Munshi
 insert into public.staff_users (email, role, full_name) values
   ('omniverop@gmail.com',        'munshi',  'Munshi'),
-  ('provost.amu@gmail.com',     'provost', 'Provost')   -- <- replace with the real provost Google email (lowercase)
+  ('iamaakoserver@gmail.com',     'provost', 'Provost')   -- <- replace with the real provost Google email (lowercase)
 on conflict (email) do update set role = excluded.role, full_name = excluded.full_name;
 
 -- Students. A student logs in with the Google account that matches `email`.

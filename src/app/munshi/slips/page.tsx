@@ -5,7 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import { AlertCircle, CheckCircle2, Download, Plus, Receipt, Search, Trash2, X } from 'lucide-react';
 import { PaymentSlip } from '@/types';
 import { DataService } from '@/lib/dataService';
-import { formatDMY, nextSlipNumbers } from '@/lib/billingUtils';
+import { formatDMY, isPrintableSlip, nextSlipNumbers, paymentLabel } from '@/lib/billingUtils';
 import { DAILY_RATE, formatDays, formatRupees, previewSlip } from '@/lib/diningEngine';
 import { SlipData } from '@/lib/foodSlip';
 import { useAdminData } from '@/components/admin/AdminData';
@@ -408,14 +408,20 @@ function SlipsView() {
                   <li key={s.id} className="flex items-center justify-between gap-1 p-1 hover:bg-slate-50">
                     <button
                       type="button"
-                      disabled={!owner || isDeleting}
+                      disabled={!owner || isDeleting || !isPrintableSlip(s)}
                       onClick={() => owner && setPreview({ slip: s, student: owner })}
                       className="press flex min-w-0 flex-1 items-center gap-3 rounded-xl px-2.5 py-2 text-left active:bg-emerald-50"
                     >
                       <span className="min-w-0 flex-1">
                         <span className="block truncate text-xs font-bold text-slate-900">{owner?.name ?? s.enrollment_no}</span>
                         <span className="block truncate text-[11px] text-slate-500">
-                          Slip No. <span className="font-mono font-semibold">{s.slip_no}</span> · {formatDMY(s.paid_on)}
+                          {isPrintableSlip(s) ? (
+                            <>
+                              Slip No. <span className="font-mono font-semibold">{s.slip_no}</span>
+                            </>
+                          ) : (
+                            paymentLabel(s)
+                          )}{' '}· {formatDMY(s.paid_on)}
                         </span>
                       </span>
                       <Pill tone="emerald">{formatRupees(s.amount)}</Pill>

@@ -4,7 +4,7 @@ import React, { useMemo, useState } from 'react';
 import { ChevronDown, Download, FileText } from 'lucide-react';
 import { PaymentSlip, Student } from '@/types';
 import { AccountState, DAILY_RATE, formatDays, formatRupees } from '@/lib/diningEngine';
-import { formatDMY } from '@/lib/billingUtils';
+import { formatDMY, isPrintableSlip, paymentLabel } from '@/lib/billingUtils';
 import { SlipData } from '@/lib/foodSlip';
 import { SlipModal } from './SlipModal';
 import { LedgerStatement } from '../ledger/LedgerStatement';
@@ -222,15 +222,15 @@ export const BillsView: React.FC<BillsViewProps> = ({ student, state, slips, tod
                 {visibleSlips.map((s, i) => (
                   <tr
                     key={s.id}
-                    onClick={() => setPreview({ slip: s, student })}
-                    className="cursor-pointer active:bg-emerald-50"
+                    onClick={isPrintableSlip(s) ? () => setPreview({ slip: s, student }) : undefined}
+                    className={isPrintableSlip(s) ? 'cursor-pointer active:bg-emerald-50' : ''}
                   >
                     <td className="px-3 py-2.5 font-semibold text-slate-500">{i + 1}</td>
-                    <td className="px-2 py-2.5 font-mono font-semibold text-slate-800">{s.slip_no}</td>
+                    <td className="px-2 py-2.5 font-mono font-semibold text-slate-800">{isPrintableSlip(s) ? s.slip_no : paymentLabel(s)}</td>
                     <td className="px-2 py-2.5 text-right font-bold text-slate-900">{formatRupees(s.amount)}</td>
                     <td className="px-2 py-2.5 text-slate-600">{formatDMY(s.paid_on)}</td>
                     <td className="px-2 py-2.5 text-emerald-800">
-                      <Download className="h-4 w-4" aria-hidden="true" />
+                      {isPrintableSlip(s) && <Download className="h-4 w-4" aria-hidden="true" />}
                     </td>
                   </tr>
                 ))}
@@ -271,7 +271,7 @@ export const BillsView: React.FC<BillsViewProps> = ({ student, state, slips, tod
               state={state}
               slips={slips}
               todayKey={todayKey}
-              onOpenSlip={(slip) => setPreview({ slip, student })}
+              onOpenSlip={(slip) => (isPrintableSlip(slip) ? setPreview({ slip, student }) : undefined)}
             />
           </div>
         )}

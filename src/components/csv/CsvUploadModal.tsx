@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import Papa from 'papaparse';
 import { UploadCloud, FileText, CheckCircle2, AlertCircle, Download, X, AlertTriangle } from 'lucide-react';
 import { HOSTEL_HOUSES, HostelHouseCode } from '@/types';
@@ -12,113 +12,111 @@ interface CsvUploadModalProps {
   onSuccess: () => void;
 }
 
+/** The CSV must have exactly these columns, in this order (same as the Excel register, plus EMAIL). */
+export const CSV_HEADERS = ['EN. ID', 'HOUSE', 'R.NO.', 'NAME OF STUDENTS', 'COURSE', 'REMARK', 'EMAIL'] as const;
+
 interface ParsedRow {
   enrollment_no: string;
-  name: string;
   house: HostelHouseCode;
   room_no: string;
+  name: string;
   course: string;
+  remarks: string;
   email: string;
-  previous_room?: string;
+  emailGenerated: boolean;
   isValid: boolean;
   validationError?: string;
 }
 
+const normaliseHeader = (h: unknown) =>
+  String(h ?? '')
+    .replace(/^\uFEFF/, '')
+    .trim()
+    .replace(/\s+/g, ' ')
+    .toUpperCase();
+
+/** "J.K." -> JK, "H.M." -> HM, "Q.H" -> QH, also the full hostel names. */
+const normalizeHouseCode = (rawHouse: string): HostelHouseCode | null => {
+  const clean = rawHouse.trim().toUpperCase();
+  if (!clean) return null;
+  const letters = clean.replace(/[^A-Z]/g, '');
+  if (letters in HOSTEL_HOUSES) return letters as HostelHouseCode;
+
+  if (clean.includes('HASRAT')) return 'HM';
+  if (clean.includes('JAI KISHAN') || clean.includes('JAIKISHAN') || clean.includes('JAI-KISHAN')) return 'JK';
+  if (clean.includes('BHOPAL')) return 'BH';
+  if (clean.includes('QIDWAI')) return 'QH';
+  if (clean.includes('KASHMIR')) return 'KH';
+  if (clean.includes('AGHA')) return 'AK';
+  if (clean.includes('MAHAMOOD')) return 'MB';
+  return null;
+};
+
 export const CsvUploadModal: React.FC<CsvUploadModalProps> = ({ isOpen, onClose, onSuccess }) => {
   const [file, setFile] = useState<File | null>(null);
   const [parsedRows, setParsedRows] = useState<ParsedRow[]>([]);
+  const [headerError, setHeaderError] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [uploadSummary, setUploadSummary] = useState<{ added: number; errors: string[] } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   if (!isOpen) return null;
 
-  // Helper to normalize house input (e.g. accepts "HM", "HM-Hasrat Mohani", "Hasrat Mohani", etc.)
-  const normalizeHouseCode = (rawHouse: string): HostelHouseCode | null => {
-    if (!rawHouse) return null;
-    const clean = rawHouse.trim().toUpperCase();
-    if (['HM', 'JK', 'BH', 'QH', 'KH', 'AK', 'MB'].includes(clean)) {
-      return clean as HostelHouseCode;
-    }
-    // Prefix match
-    if (clean.startsWith('HM')) return 'HM';
-    if (clean.startsWith('JK') || clean.startsWith('J.K')) return 'JK';
-    if (clean.startsWith('BH')) return 'BH';
-    if (clean.startsWith('QH')) return 'QH';
-    if (clean.startsWith('KH')) return 'KH';
-    if (clean.startsWith('AK')) return 'AK';
-    if (clean.startsWith('MB')) return 'MB';
-
-    if (clean.includes('HASRAT')) return 'HM';
-    if (clean.includes('JAI KISHAN') || clean.includes('JAIKISHAN') || clean.includes('JAI-KISHAN')) return 'JK';
-    if (clean.includes('BHOPAL')) return 'BH';
-    if (clean.includes('QIDWAI')) return 'QH';
-    if (clean.includes('KASHMIR')) return 'KH';
-    if (clean.includes('AGHA')) return 'AK';
-    if (clean.includes('MAHAMOOD')) return 'MB';
-
-    return null;
-  };
-
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
-    if (selectedFile) {
-      processCsv(selectedFile);
-    }
+    if (selectedFile) processCsv(selectedFile);
+    e.target.value = '';
   };
 
   const processCsv = (selectedFile: File) => {
     setFile(selectedFile);
     setUploadSummary(null);
+    setHeaderError('');
+    setParsedRows([]);
 
-    Papa.parse(selectedFile, {
-      header: true,
-      skipEmptyLines: true,
+    Papa.parse<string[]>(selectedFile, {
+      header: false,
+      skipEmptyLines: 'greedy',
       complete: (results) => {
-        const rows: ParsedRow[] = results.data.map((raw: any, index: number) => {
-          // Normalize column names regardless of exact casing or spaces
-          const getVal = (keys: string[]) => {
-            for (const k of keys) {
-              const found = Object.keys(raw).find(
-                rk => rk.trim().toLowerCase().replace(/[^a-z0-9]/g, '') === k.toLowerCase().replace(/[^a-z0-9]/g, '')
-              );
-              if (found && raw[found]) return String(raw[found]).trim();
-            }
-            return '';
-          };
+        const [head, ...body] = results.data;
+        const found = (head ?? []).map(normaliseHeader);
 
-          const enrollment = getVal(['enrollmentno', 'enrolmentno', 'enrollment', 'enrollmentnumber', 'enrolment']);
-          const name = getVal(['name', 'studentname', 'fullname']) || `Student ${enrollment || index + 1}`;
-          const rawHouse = getVal(['house', 'hostelhouse', 'hostel']);
-          const room = getVal(['roomnumber', 'roomno', 'room']);
-          const course = getVal(['course', 'couse', 'branch', 'programme']) || 'Undergraduate';
-          const email = getVal(['email', 'emailid', 'mail']) || `${enrollment.toLowerCase()}@myamu.ac.in`;
-          const prevRoom = getVal(['previousroom', 'prevroom', 'oldroom']) || 'New Allotment';
+        const sameColumns =
+          found.length === CSV_HEADERS.length && CSV_HEADERS.every((h, i) => found[i] === h);
+        if (!sameColumns) {
+          setHeaderError(
+            `The CSV columns must be exactly: ${CSV_HEADERS.join(', ')} (in this order). ` +
+              `Your file has: ${found.length ? found.join(', ') : 'no header row'}.`
+          );
+          return;
+        }
 
+        const seen = new Set<string>();
+        const rows: ParsedRow[] = body.map((cells) => {
+          const [en, rawHouse, room, name, course, remark, email] = CSV_HEADERS.map((_, i) => String(cells[i] ?? '').trim());
+
+          const enrollment = en.toUpperCase();
           const houseCode = normalizeHouseCode(rawHouse);
-          let isValid = true;
           let validationError = '';
+          if (!enrollment) validationError = 'Missing EN. ID';
+          else if (seen.has(enrollment)) validationError = 'EN. ID repeated in this file';
+          else if (!houseCode) validationError = `Invalid HOUSE "${rawHouse}"`;
+          else if (!room) validationError = 'Missing R.NO.';
+          else if (!name) validationError = 'Missing NAME OF STUDENTS';
+          else if (email && !email.includes('@')) validationError = 'EMAIL is not valid';
+          if (enrollment) seen.add(enrollment);
 
-          if (!enrollment) {
-            isValid = false;
-            validationError = 'Missing Enrollment Number';
-          } else if (!houseCode) {
-            isValid = false;
-            validationError = `Invalid House "${rawHouse}". Must be HM, JK, MB, KH, BH, QH, or AK.`;
-          } else if (!room) {
-            isValid = false;
-            validationError = 'Missing Room Number';
-          }
-
+          const emailGenerated = !email;
           return {
-            enrollment_no: enrollment.toUpperCase(),
-            name,
+            enrollment_no: enrollment,
             house: (houseCode || 'HM') as HostelHouseCode,
             room_no: room,
-            course,
-            email,
-            previous_room: prevRoom,
-            isValid,
+            name,
+            course: course.replace(/\.+$/, '') || 'General Course',
+            remarks: remark,
+            email: (email || `${enrollment.toLowerCase()}@myamu.ac.in`).toLowerCase(),
+            emailGenerated,
+            isValid: !validationError,
             validationError
           };
         });
@@ -126,38 +124,40 @@ export const CsvUploadModal: React.FC<CsvUploadModalProps> = ({ isOpen, onClose,
         setParsedRows(rows);
       },
       error: (error) => {
-        alert('Failed to parse CSV file: ' + error.message);
+        setHeaderError('Could not read the CSV file: ' + error.message);
       }
     });
   };
 
   const handleCommitUpload = async () => {
-    const validRows = parsedRows.filter(r => r.isValid);
-    if (validRows.length === 0) {
-      alert('No valid student records found to import.');
-      return;
-    }
+    const validRows = parsedRows.filter((r) => r.isValid);
+    if (validRows.length === 0) return;
 
     setIsProcessing(true);
-    const result = await DataService.bulkAddStudents(validRows);
+    const result = await DataService.bulkAddStudents(
+      validRows.map((r) => ({
+        enrollment_no: r.enrollment_no,
+        name: r.name,
+        house: r.house,
+        room_no: r.room_no,
+        course: r.course,
+        email: r.email,
+        remarks: r.remarks || undefined
+      }))
+    );
     setIsProcessing(false);
     setUploadSummary(result);
-
-    if (result.added > 0) {
-      onSuccess();
-    }
+    if (result.added > 0) onSuccess();
   };
 
   const downloadSampleTemplate = () => {
-    const headers = 'Enrollment Number,Name,House,Room Number,Course,Email,Previous room\n';
-    const sample1 = 'GJ1021,Tariq Anwar,HM,14,B.Tech Computer Engg,tariq.anwar@myamu.ac.in,08\n';
-    const sample2 = 'GJ1045,Zaid Farooqui,BH,22,MCA,zaid.farooqui@myamu.ac.in,15\n';
-    const sample3 = 'GK2219,Saad Qureshi,QH,05,M.Sc Physics,saad.qureshi@myamu.ac.in,New Allotment\n';
-    const sample4 = 'GL3412,Hamza Rizvi,KH,31,MBBS,hamza.rizvi@myamu.ac.in,19\n';
-    const sample5 = 'GM5501,Arham Siddiqui,AK,12,B.A. English,arham.siddiqui@myamu.ac.in,03\n';
-    const sample6 = 'GN6782,Bilal Masood,MB,40,B.Com Hons,bilal.masood@myamu.ac.in,33\n';
-
-    const blob = new Blob([headers + sample1 + sample2 + sample3 + sample4 + sample5 + sample6], { type: 'text/csv;charset=utf-8;' });
+    const lines = [
+      CSV_HEADERS.join(','),
+      'GN0702,J.K.,2,SAMEER RAJA,B.ARCH,,sameer@gmail.com',
+      'GP8003,J.K.,2,YASIR MASOOM,B.TECH,BY UMAISH SID.,yasir@gmail.com',
+      'GM8713,J.K.,2,MOHD ATIF NOOR,B.TECH,"FRM KHWR 24.08.26, FRM HM09 08.11.26",atif@gmail.com'
+    ];
+    const blob = new Blob([lines.join('\n') + '\n'], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
@@ -165,110 +165,98 @@ export const CsvUploadModal: React.FC<CsvUploadModalProps> = ({ isOpen, onClose,
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
 
-  const validCount = parsedRows.filter(r => r.isValid).length;
+  const validCount = parsedRows.filter((r) => r.isValid).length;
   const invalidCount = parsedRows.length - validCount;
+  const generatedEmails = parsedRows.filter((r) => r.isValid && r.emailGenerated).length;
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full border border-slate-200 overflow-hidden flex flex-col max-h-[90vh]">
+    <div className="no-print fade-enter fixed inset-0 z-50 flex items-end justify-center bg-slate-900/60 sm:items-center sm:p-4">
+      <div className="sheet-enter flex max-h-[94dvh] w-full max-w-4xl flex-col overflow-hidden rounded-t-3xl border border-slate-200 bg-white shadow-2xl sm:rounded-2xl">
         {/* Header */}
-        <div className="bg-emerald-900 text-white px-6 py-4 flex items-center justify-between">
+        <div className="flex items-center justify-between bg-emerald-900 px-5 py-4 text-white">
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-emerald-800 rounded-lg">
-              <UploadCloud className="w-5 h-5 text-amber-400" />
+            <div className="rounded-lg bg-emerald-800 p-2">
+              <UploadCloud className="h-5 w-5 text-amber-400" />
             </div>
             <div>
               <h3 className="text-lg font-bold">Import Students via CSV</h3>
-              <p className="text-xs text-emerald-200">
-                Bulk register students for the dining hall with hostel house codes
-              </p>
+              <p className="text-xs text-emerald-200">Same columns as the Excel register, plus EMAIL</p>
             </div>
           </div>
-          <button 
-            onClick={onClose}
-            className="p-1 rounded-lg text-emerald-200 hover:text-white hover:bg-emerald-800 transition"
-          >
-            <X className="w-5 h-5" />
+          <button type="button" onClick={onClose} aria-label="Close" className="press rounded-lg p-2 text-emerald-200 active:bg-emerald-800">
+            <X className="h-5 w-5" />
           </button>
         </div>
 
         {/* Body */}
-        <div className="p-6 overflow-y-auto flex-1 space-y-5">
-          {/* House Reference Notice */}
-          <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 text-xs text-emerald-950">
-            <div className="font-semibold text-emerald-900 mb-1 flex items-center gap-1.5">
-              <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-              Valid House Codes Supported:
+        <div className="flex-1 space-y-5 overflow-y-auto p-5">
+          <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-xs text-emerald-950">
+            <div className="mb-2 flex items-center gap-1.5 font-semibold text-emerald-900">
+              <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+              The first row must be exactly these columns, in this order:
             </div>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mt-2">
-              {Object.values(HOSTEL_HOUSES).map(h => (
-                <div key={h.code} className="bg-white px-2.5 py-1.5 rounded border border-emerald-100 flex items-center gap-2">
-                  <span className="font-bold text-emerald-800 bg-emerald-100 px-1.5 py-0.5 rounded text-[11px]">
-                    {h.code}
-                  </span>
-                  <span className="text-slate-700 truncate">{h.name}</span>
-                </div>
+            <div className="flex flex-wrap gap-1.5">
+              {CSV_HEADERS.map((h, i) => (
+                <span key={h} className="rounded border border-emerald-200 bg-white px-2 py-1 font-mono text-[11px] font-bold">
+                  {i + 1}. {h}
+                </span>
               ))}
             </div>
+            <p className="mt-2 text-emerald-900/80">
+              HOUSE can be written like the sheet (J.K., H.M., B.H., Q.H., K.H., A.K., M.B.) or as JK, HM and so on. REMARK and
+              EMAIL may be left empty; an empty EMAIL becomes <span className="font-mono">enrollment@myamu.ac.in</span>.
+            </p>
           </div>
 
-          {/* Action Row: Sample Template & File Selector */}
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-4 border-2 border-dashed border-slate-300 rounded-xl bg-slate-50 hover:bg-slate-100/70 transition">
+          <div className="flex flex-col items-center justify-between gap-4 rounded-xl border-2 border-dashed border-slate-300 bg-slate-50 p-4 sm:flex-row">
             <div className="flex items-center gap-3">
-              <FileText className="w-8 h-8 text-emerald-700" />
-              <div>
-                <p className="text-sm font-semibold text-slate-800">
-                  {file ? file.name : 'Choose a CSV file or drag it here'}
-                </p>
-                <p className="text-xs text-slate-500">
-                  Required columns: Enrollment Number, House, Room Number, Course, Email, Previous room
-                </p>
-              </div>
+              <FileText className="h-8 w-8 text-emerald-700" />
+              <p className="text-sm font-semibold text-slate-800">{file ? file.name : 'Choose a CSV file'}</p>
             </div>
 
-            <div className="flex items-center gap-2 w-full sm:w-auto">
+            <div className="flex w-full items-center gap-2 sm:w-auto">
               <button
                 type="button"
                 onClick={downloadSampleTemplate}
-                className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-emerald-800 bg-emerald-100 hover:bg-emerald-200 rounded-lg transition"
+                className="press flex items-center gap-1.5 rounded-lg bg-emerald-100 px-3 py-2 text-xs font-semibold text-emerald-800"
               >
-                <Download className="w-3.5 h-3.5" />
-                Sample CSV Template
+                <Download className="h-3.5 w-3.5" />
+                Sample CSV
               </button>
-
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".csv"
-                onChange={handleFileChange}
-                className="hidden"
-              />
+              <input ref={fileInputRef} type="file" accept=".csv" onChange={handleFileChange} className="hidden" />
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
-                className="px-4 py-2 text-xs font-bold text-white bg-emerald-700 hover:bg-emerald-800 rounded-lg transition shadow-sm"
+                className="press rounded-lg bg-emerald-700 px-4 py-2 text-xs font-bold text-white shadow-sm"
               >
                 Select File
               </button>
             </div>
           </div>
 
-          {/* Upload Summary Feedback */}
+          {headerError && (
+            <div role="alert" className="flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs font-semibold text-rose-800">
+              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-rose-600" />
+              {headerError}
+            </div>
+          )}
+
           {uploadSummary && (
-            <div className={`p-4 rounded-xl border text-sm ${
-              uploadSummary.added > 0 
-                ? 'bg-green-50 border-green-200 text-green-900' 
-                : 'bg-red-50 border-red-200 text-red-900'
-            }`}>
-              <div className="font-bold flex items-center gap-2">
-                {uploadSummary.added > 0 ? <CheckCircle2 className="w-4 h-4 text-green-600" /> : <AlertCircle className="w-4 h-4 text-red-600" />}
-                {uploadSummary.added} students successfully registered to dining database!
+            <div
+              className={`rounded-xl border p-4 text-sm ${
+                uploadSummary.added > 0 ? 'border-green-200 bg-green-50 text-green-900' : 'border-red-200 bg-red-50 text-red-900'
+              }`}
+            >
+              <div className="flex items-center gap-2 font-bold">
+                {uploadSummary.added > 0 ? <CheckCircle2 className="h-4 w-4 text-green-600" /> : <AlertCircle className="h-4 w-4 text-red-600" />}
+                {uploadSummary.added} students registered.
               </div>
               {uploadSummary.errors.length > 0 && (
-                <div className="mt-2 text-xs space-y-1 text-red-700">
-                  <p className="font-semibold">Import Warnings/Skipped:</p>
+                <div className="mt-2 space-y-1 text-xs text-red-700">
+                  <p className="font-semibold">Skipped:</p>
                   {uploadSummary.errors.map((err, i) => (
                     <div key={i}>• {err}</div>
                   ))}
@@ -277,65 +265,65 @@ export const CsvUploadModal: React.FC<CsvUploadModalProps> = ({ isOpen, onClose,
             </div>
           )}
 
-          {/* Preview Table */}
           {parsedRows.length > 0 && (
             <div className="space-y-3">
-              <div className="flex items-center justify-between text-xs">
-                <span className="font-bold text-slate-700">
-                  Parsed Records ({parsedRows.length} Total)
-                </span>
-                <div className="flex gap-2">
-                  <span className="bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded font-semibold">
-                    {validCount} Ready to Import
-                  </span>
+              <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                <span className="font-bold text-slate-700">Rows in the file: {parsedRows.length}</span>
+                <div className="flex flex-wrap gap-2">
+                  <span className="rounded bg-emerald-100 px-2 py-0.5 font-semibold text-emerald-800">{validCount} ready to import</span>
+                  {generatedEmails > 0 && (
+                    <span className="rounded bg-amber-100 px-2 py-0.5 font-semibold text-amber-800">{generatedEmails} without EMAIL</span>
+                  )}
                   {invalidCount > 0 && (
-                    <span className="bg-rose-100 text-rose-800 px-2 py-0.5 rounded font-semibold flex items-center gap-1">
-                      <AlertTriangle className="w-3 h-3" />
-                      {invalidCount} Invalid Rows
+                    <span className="flex items-center gap-1 rounded bg-rose-100 px-2 py-0.5 font-semibold text-rose-800">
+                      <AlertTriangle className="h-3 w-3" />
+                      {invalidCount} invalid
                     </span>
                   )}
                 </div>
               </div>
 
-              <div className="border border-slate-200 rounded-xl overflow-hidden max-h-60 overflow-y-auto text-xs">
-                <table className="w-full text-left divide-y divide-slate-200">
-                  <thead className="bg-slate-100 text-slate-700 sticky top-0 font-semibold">
+              <div className="max-h-60 overflow-auto rounded-xl border border-slate-200 text-xs">
+                <table className="w-full min-w-[640px] divide-y divide-slate-200 text-left">
+                  <thead className="sticky top-0 bg-slate-100 font-semibold text-slate-700">
                     <tr>
                       <th className="p-2.5">Status</th>
-                      <th className="p-2.5">Enrollment</th>
-                      <th className="p-2.5">Name</th>
-                      <th className="p-2.5">House</th>
-                      <th className="p-2.5">Room</th>
-                      <th className="p-2.5">Course</th>
-                      <th className="p-2.5">Previous Room</th>
+                      <th className="p-2.5">EN. ID</th>
+                      <th className="p-2.5">HOUSE</th>
+                      <th className="p-2.5">R.NO.</th>
+                      <th className="p-2.5">NAME OF STUDENTS</th>
+                      <th className="p-2.5">COURSE</th>
+                      <th className="p-2.5">REMARK</th>
+                      <th className="p-2.5">EMAIL</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 bg-white">
                     {parsedRows.map((row, idx) => (
                       <tr key={idx} className={row.isValid ? 'hover:bg-slate-50' : 'bg-rose-50/50'}>
-                        <td className="p-2.5 whitespace-nowrap">
+                        <td className="whitespace-nowrap p-2.5">
                           {row.isValid ? (
-                            <span className="inline-flex items-center gap-1 text-emerald-700 font-semibold">
-                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                            <span className="inline-flex items-center gap-1 font-semibold text-emerald-700">
+                              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
                               Valid
                             </span>
                           ) : (
-                            <span className="inline-flex items-center gap-1 text-rose-700 font-semibold" title={row.validationError}>
-                              <AlertCircle className="w-3.5 h-3.5 text-rose-600" />
+                            <span className="inline-flex items-center gap-1 font-semibold text-rose-700">
+                              <AlertCircle className="h-3.5 w-3.5 text-rose-600" />
                               {row.validationError}
                             </span>
                           )}
                         </td>
                         <td className="p-2.5 font-mono font-bold text-slate-900">{row.enrollment_no}</td>
-                        <td className="p-2.5 text-slate-800">{row.name}</td>
                         <td className="p-2.5">
-                          <span className={`px-2 py-0.5 rounded text-[11px] font-bold ${HOSTEL_HOUSES[row.house]?.color || 'bg-slate-100'}`}>
-                            {row.house} - {HOSTEL_HOUSES[row.house]?.shortName}
+                          <span className={`rounded px-2 py-0.5 text-[11px] font-bold ${HOSTEL_HOUSES[row.house]?.color || 'bg-slate-100'}`}>
+                            {row.house}
                           </span>
                         </td>
                         <td className="p-2.5 font-medium">{row.room_no}</td>
+                        <td className="p-2.5 text-slate-800">{row.name}</td>
                         <td className="p-2.5 text-slate-600">{row.course}</td>
-                        <td className="p-2.5 text-slate-500">{row.previous_room || 'New Allotment'}</td>
+                        <td className="max-w-[10rem] truncate p-2.5 text-slate-500" title={row.remarks}>{row.remarks}</td>
+                        <td className={`p-2.5 font-mono ${row.emailGenerated ? 'text-amber-700' : 'text-slate-600'}`}>{row.email}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -346,22 +334,17 @@ export const CsvUploadModal: React.FC<CsvUploadModalProps> = ({ isOpen, onClose,
         </div>
 
         {/* Footer */}
-        <div className="bg-slate-50 px-6 py-4 border-t border-slate-200 flex items-center justify-between">
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-900 transition"
-          >
+        <div className="flex items-center justify-between border-t border-slate-200 bg-slate-50 px-5 py-4">
+          <button type="button" onClick={onClose} className="press px-4 py-2 text-xs font-semibold text-slate-600">
             Cancel
           </button>
-
           <button
             type="button"
             disabled={validCount === 0 || isProcessing}
             onClick={handleCommitUpload}
-            className="px-5 py-2.5 text-xs font-bold text-white bg-emerald-800 hover:bg-emerald-900 rounded-xl transition shadow disabled:opacity-50 flex items-center gap-2"
+            className="press flex items-center gap-2 rounded-xl bg-emerald-800 px-5 py-2.5 text-xs font-bold text-white shadow disabled:opacity-50"
           >
-            {isProcessing ? 'Importing into Database...' : `Import ${validCount} Students`}
+            {isProcessing ? 'Importing…' : `Import ${validCount} Students`}
           </button>
         </div>
       </div>

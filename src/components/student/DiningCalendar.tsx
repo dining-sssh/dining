@@ -13,6 +13,7 @@ const CELL_STYLES: Record<DayKind, string> = {
   deficit: 'bg-orange-300 text-orange-950 ring-1 ring-orange-500',
   off: 'bg-amber-200 text-amber-950 ring-1 ring-amber-400',
   stopped: 'bg-rose-400 text-white ring-1 ring-rose-500',
+  closed: 'bg-sky-100 text-sky-800 ring-1 ring-sky-300',
   upcoming: 'bg-white text-slate-800 ring-1 ring-slate-300',
   break: 'bg-slate-100 text-slate-400',
   before: 'bg-transparent text-slate-300'
@@ -23,6 +24,7 @@ const BADGE_STYLES: Record<DayKind, string> = {
   deficit: 'bg-orange-100 text-orange-800',
   off: 'bg-amber-100 text-amber-800',
   stopped: 'bg-rose-100 text-rose-800',
+  closed: 'bg-sky-100 text-sky-800',
   upcoming: 'bg-slate-200 text-slate-700',
   break: 'bg-slate-200 text-slate-700',
   before: 'bg-slate-200 text-slate-700'
@@ -152,6 +154,7 @@ export const DiningCalendar: React.FC<DiningCalendarProps> = React.memo(({
         <LegendDot className="bg-orange-300 ring-1 ring-orange-500" label="Deficit" />
         <LegendDot className="bg-amber-200 ring-1 ring-amber-400" label="Off" />
         <LegendDot className="bg-rose-400 ring-1 ring-rose-500" label="Stopped" />
+        <LegendDot className="bg-sky-100 ring-1 ring-sky-300" label="Hall closed" />
         <LegendDot className="bg-white ring-1 ring-slate-400" label="Upcoming" />
       </div>
     </section>

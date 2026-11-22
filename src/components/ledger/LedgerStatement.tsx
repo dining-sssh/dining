@@ -4,7 +4,7 @@ import React, { useMemo, useState } from 'react';
 import { ArrowDownLeft, CalendarDays } from 'lucide-react';
 import { PaymentSlip } from '@/types';
 import { AccountState, formatDays, formatRupees } from '@/lib/diningEngine';
-import { formatDMY } from '@/lib/billingUtils';
+import { formatDMY, isPrintableSlip, paymentLabel } from '@/lib/billingUtils';
 import { monthLabel } from '@/components/student/studentUtils';
 
 interface LedgerStatementProps {
@@ -53,19 +53,20 @@ export const LedgerStatement: React.FC<LedgerStatementProps> = ({ state, slips, 
           if (row.kind === 'deposit' && row.slip) {
             const s = row.slip;
             const r = state.slipResults.get(s.id);
-            const Row = onOpenSlip ? 'button' : 'div';
+            const canOpen = Boolean(onOpenSlip) && isPrintableSlip(s);
+            const Row = canOpen ? 'button' : 'div';
             return (
               <li key={row.id}>
                 <Row
-                  {...(onOpenSlip ? { type: 'button' as const, onClick: () => onOpenSlip(s) } : {})}
-                  className={`flex w-full items-center gap-3 px-3.5 py-3 text-left ${onOpenSlip ? 'press active:bg-emerald-50' : ''}`}
+                  {...(canOpen ? { type: 'button' as const, onClick: () => onOpenSlip!(s) } : {})}
+                  className={`flex w-full items-center gap-3 px-3.5 py-3 text-left ${canOpen ? 'press active:bg-emerald-50' : ''}`}
                 >
                   <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-100 text-emerald-800">
                     <ArrowDownLeft className="h-4 w-4" />
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-xs font-bold text-slate-900">
-                      Deposit · Slip No. {s.slip_no}
+                      {isPrintableSlip(s) ? `Deposit · ${paymentLabel(s)}` : paymentLabel(s)}
                     </span>
                     <span className="block truncate text-[11px] text-slate-500">
                       {formatDMY(s.paid_on)}

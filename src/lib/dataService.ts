@@ -4,6 +4,7 @@ import {
   PaymentSlip,
   DeficitEntry,
   GraceExtension,
+  HallClosedDay,
   MenuItem,
   DiningTiming,
   MessSettings,
@@ -33,6 +34,7 @@ const STORAGE_KEY_REQUESTS = 'amu_dining_requests_v1';
 const STORAGE_KEY_PAYMENTS = 'amu_dining_payments_v3';
 const STORAGE_KEY_ENTRIES = 'amu_dining_entries_v1';
 const STORAGE_KEY_EXTENSIONS = 'amu_dining_extensions_v1';
+const STORAGE_KEY_CLOSED = 'amu_dining_closed_v1';
 const STORAGE_KEY_MENU = 'amu_dining_menu_v1';
 const STORAGE_KEY_TIMINGS = 'amu_dining_timings_v1';
 const STORAGE_KEY_SETTINGS = 'amu_dining_settings_v2';
@@ -184,6 +186,7 @@ export const DataService = {
     course: string;
     email: string;
     previous_room?: string;
+    remarks?: string;
   }>): Promise<{ added: number; errors: string[] }> {
     const existing = await this.getStudents();
     const existingEnrollments = new Set(existing.map(s => s.enrollment_no.toUpperCase()));
@@ -233,6 +236,7 @@ export const DataService = {
         course: row.course?.trim() || 'General Course',
         email,
         previous_room: row.previous_room?.trim() || 'New Allotment',
+        remarks: row.remarks?.trim() || undefined,
         session: '2026-2027',
         status: 'active',
         dining_from: todayKey()
@@ -440,6 +444,30 @@ export const DataService = {
     setLocal(STORAGE_KEY_EXTENSIONS, all.map((e) => (e.id === id ? { ...e, status: 'cancelled' as const } : e)));
   },
 
+  // --- HALL CLOSED DAYS (nobody is charged) ---
+  async getClosedDays(): Promise<HallClosedDay[]> {
+    if (useDb()) return safeRead('closed days', db.listClosedDays, []);
+    return getLocal<HallClosedDay[]>(STORAGE_KEY_CLOSED, []);
+  },
+
+  async addClosedDay(day: HallClosedDay): Promise<void> {
+    if (useDb()) {
+      await db.insertClosedDay(day);
+      return;
+    }
+    const all = await this.getClosedDays();
+    setLocal(STORAGE_KEY_CLOSED, [...all.filter((d) => d.day !== day.day), day].sort((a, b) => a.day.localeCompare(b.day)));
+  },
+
+  async removeClosedDay(day: string): Promise<void> {
+    if (useDb()) {
+      await db.removeClosedDay(day);
+      return;
+    }
+    const all = await this.getClosedDays();
+    setLocal(STORAGE_KEY_CLOSED, all.filter((d) => d.day !== day));
+  },
+
   // --- MENU AND TIMINGS (set by the Munshi, shown to students) ---
   async getMenu(): Promise<MenuItem[]> {
     if (useDb()) return safeRead('menu', db.listMenu, []);
@@ -579,6 +607,7 @@ export const DataService = {
       STORAGE_KEY_PAYMENTS,
       STORAGE_KEY_ENTRIES,
       STORAGE_KEY_EXTENSIONS,
+      STORAGE_KEY_CLOSED,
       STORAGE_KEY_MENU,
       STORAGE_KEY_TIMINGS,
       STORAGE_KEY_SETTINGS,

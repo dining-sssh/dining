@@ -15,6 +15,7 @@ import { DeficitEntry, DiningRequest, GraceExtension, PaymentSlip } from '@/type
  * - The next deposit always pays the negative days first. The Munshi may also choose earlier
  *   months of carried deficit (DeficitEntry) to clear with the same slip.
  * - The dining year runs August to May. June and July are a break and cost nothing.
+ * - Days the whole hall is closed (CLOSE, Sir Syed Day...) cost nothing for anyone.
  */
 
 export const DAILY_RATE = 1400 / 30; // 46.666...
@@ -22,6 +23,8 @@ export const GRACE_DAYS = 3;
 export const LOW_BALANCE_DAYS = 3; // warn when this few paid days are left
 
 const EPS = 1e-9;
+/** An amount saved to the paisa (7653.33) still buys the whole day it is meant for (163.99993 -> 164). */
+const PAISA_DAYS = 0.0005;
 
 /* ------------------------------ small date helpers ------------------------------ */
 
@@ -69,6 +72,7 @@ export type DayKind =
   | 'deficit' //  dining on, no paid day left: deficit day
   | 'off' //      dining closed
   | 'stopped' //  grace limit reached: dining stopped until payment
+  | 'closed' //   the whole hall is closed that day (costs nothing)
   | 'break' //    June / July
   | 'upcoming' // after today
   | 'before'; //  before the student's dining start
@@ -91,6 +95,7 @@ export interface MonthSummary {
   deficitDays: number;
   offDays: number;
   stoppedDays: number;
+  closedDays: number;
   /** Deficit that built up this month from deficit days. */
   daysDeficit: number;
   /** Carried deficit entered for this month. */
@@ -130,6 +135,8 @@ export interface AccountState {
   today: string;
   days: Map<string, DayInfo>;
   months: Map<string, MonthSummary>;
+  /** Dates the whole hall is closed. */
+  closed: ReadonlySet<string>;
   /** Paid days left (never below 0). */
   wallet: number;
   /** Positive = paid days left, negative = days eaten beyond the paid days. */
@@ -161,6 +168,8 @@ export interface EngineInput {
   slips: PaymentSlip[];
   extensions: GraceExtension[];
   entries: DeficitEntry[];
+  /** Dates the whole hall is closed (nobody is charged). */
+  closedDates?: Iterable<string>;
   todayKey: string;
 }
 
@@ -171,12 +180,15 @@ interface Open {
   amount: number;
 }
 
+/** Serial part of a slip number: 145/14409 and 14409 both give 14409 (0 when there is none). */
+const slipSerial = (no: string): number => Number(String(no).split('/').pop()) || 0;
+
 export function simulateAccount(input: EngineInput): AccountState {
   const { todayKey } = input;
   const start = input.student.dining_from || todayKey;
 
   const slips = [...input.slips].sort(
-    (a, b) => a.paid_on.localeCompare(b.paid_on) || Number(a.slip_no) - Number(b.slip_no)
+    (a, b) => a.paid_on.localeCompare(b.paid_on) || slipSerial(a.slip_no) - slipSerial(b.slip_no)
   );
   const events = input.requests
     .filter((r) => r.status === 'approved')
@@ -185,6 +197,7 @@ export function simulateAccount(input: EngineInput): AccountState {
     .filter((e) => e.status === 'applied' && e.applied_at)
     .sort((a, b) => String(a.applied_at).localeCompare(String(b.applied_at)));
   const entries = input.entries.map((e) => ({ ...e, settled: false }));
+  const closed = new Set<string>(input.closedDates ?? []);
 
   const days = new Map<string, DayInfo>();
   const months = new Map<string, MonthSummary>();
@@ -199,6 +212,7 @@ export function simulateAccount(input: EngineInput): AccountState {
         deficitDays: 0,
         offDays: 0,
         stoppedDays: 0,
+        closedDays: 0,
         daysDeficit: 0,
         carriedDeficit: 0,
         totalDeficit: 0,
@@ -241,7 +255,7 @@ export function simulateAccount(input: EngineInput): AccountState {
     open = [];
     extra = 0; // a new run starts after a deposit
     totalPaid += slip.amount;
-    const credited = Math.floor(Math.max((slip.amount - mandatoryAmount - selectedAmount) / DAILY_RATE, 0) + 1e-9);
+    const credited = Math.floor(Math.max((slip.amount - mandatoryAmount - selectedAmount) / DAILY_RATE, 0) + PAISA_DAYS);
     wallet += credited;
     slipResults.set(slip.id, {
       mandatoryDays,
@@ -272,6 +286,9 @@ export function simulateAccount(input: EngineInput): AccountState {
 
     if (!isDiningDate(d)) {
       kind = 'break';
+    } else if (closed.has(d)) {
+      kind = 'closed';
+      month.closedDays += 1;
     } else if (isOff) {
       kind = 'off';
       month.offDays += 1;
@@ -345,6 +362,7 @@ export function simulateAccount(input: EngineInput): AccountState {
     today: todayKey,
     days,
     months,
+    closed,
     wallet,
     balanceDays: wallet > EPS ? wallet : -open.length,
     negativeDays: open.length,
@@ -372,6 +390,7 @@ export function dayInfoFor(state: AccountState, requests: DiningRequest[], date:
   if (known) return known;
   if (date < state.start) return { date, kind: 'before', deficit: 0, settled: false, balanceAfter: 0 };
   if (!isDiningDate(date)) return { date, kind: 'break', deficit: 0, settled: false, balanceAfter: 0 };
+  if (state.closed.has(date)) return { date, kind: 'closed', deficit: 0, settled: false, balanceAfter: state.balanceDays };
 
   // After today: only approved requests that start on or before that day are known.
   let off = state.status === 'off';
@@ -393,7 +412,7 @@ export function previewSlip(state: AccountState, amount: number, settleMonths: s
   const mandatoryAmount = state.negativeAmount;
   const minimumAmount = mandatoryAmount + selectedAmount;
   const enough = amount + EPS >= minimumAmount;
-  const creditedDays = enough ? Math.floor((amount - minimumAmount) / DAILY_RATE + 1e-9) : 0;
+  const creditedDays = enough ? Math.floor((amount - minimumAmount) / DAILY_RATE + PAISA_DAYS) : 0;
   return {
     mandatoryDays: state.negativeDays,
     mandatoryAmount,

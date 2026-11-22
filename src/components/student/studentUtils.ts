@@ -96,6 +96,7 @@ export const DAY_LABEL: Record<DayKind, string> = {
   deficit: 'Eaten on deficit',
   off: 'Dining off',
   stopped: 'Dining stopped',
+  closed: 'Hall closed (not charged)',
   break: 'Vacation (June, July)',
   upcoming: 'Upcoming',
   before: 'Before dining started'
