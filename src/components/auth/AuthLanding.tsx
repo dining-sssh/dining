@@ -17,34 +17,13 @@ interface AuthLandingProps {
 /* ------------------------------------------------------------------ */
 
 const AmuEmblem: React.FC<{ className?: string }> = ({ className }) => (
-  <svg viewBox="0 0 200 200" className={className} role="img" aria-label="Aligarh Muslim University emblem">
-    <defs>
-      <path id="emblem-arc" d="M 100 100 m -78 0 a 78 78 0 1 1 156 0" />
-    </defs>
-    <circle cx="100" cy="100" r="96" fill="#fff" stroke="#14532d" strokeWidth="4" />
-    <circle cx="100" cy="100" r="89" fill="none" stroke="#14532d" strokeWidth="1.2" />
-    <circle cx="100" cy="100" r="58" fill="none" stroke="#14532d" strokeWidth="1.6" />
-    <text fontSize="11.5" fontWeight="700" fill="#14532d" letterSpacing="2.2" fontFamily="Georgia, serif">
-      <textPath href="#emblem-arc" startOffset="50%" textAnchor="middle">
-        ALIGARH MUSLIM UNIVERSITY
-      </textPath>
-    </text>
-    <text x="30" y="108" fontSize="14" fill="#14532d">★</text>
-    <text x="156" y="108" fontSize="14" fill="#14532d">★</text>
-    {/* palm tree */}
-    <g stroke="#14532d" strokeLinecap="round" fill="none">
-      <path d="M100 150 C 97 132, 103 112, 100 88" strokeWidth="6" />
-      <path d="M100 88 C 84 72, 66 72, 54 86" strokeWidth="4" />
-      <path d="M100 88 C 88 62, 70 56, 58 62" strokeWidth="4" />
-      <path d="M100 88 C 96 66, 86 52, 72 46" strokeWidth="4" />
-      <path d="M100 88 C 100 70, 100 56, 100 44" strokeWidth="4" />
-      <path d="M100 88 C 116 72, 134 72, 146 86" strokeWidth="4" />
-      <path d="M100 88 C 112 62, 130 56, 142 62" strokeWidth="4" />
-      <path d="M100 88 C 104 66, 114 52, 128 46" strokeWidth="4" />
-      <path d="M84 152 C 92 148, 108 148, 116 152" strokeWidth="3" />
-    </g>
-    <path d="M74 166 C 90 160, 110 160, 126 166" stroke="#14532d" strokeWidth="2" fill="none" strokeLinecap="round" />
-  </svg>
+  <div className={`relative flex items-center justify-center ${className ?? ''}`}>
+    <img
+      src="/amu-logo.png"
+      alt="Aligarh Muslim University emblem"
+      className="h-full w-full object-contain"
+    />
+  </div>
 );
 
 const CampusArt: React.FC<{ className?: string }> = ({ className }) => (

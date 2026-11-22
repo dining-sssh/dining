@@ -3,7 +3,7 @@
 import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { GraduationCap, LogOut } from 'lucide-react';
+import { LogOut } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { AuthSession } from '@/types';
 import { PAGE_BACKGROUND } from './ui';
@@ -40,8 +40,8 @@ export const AdminShell: React.FC<AdminShellProps> = ({ panelName, panelNote, na
       {/* Sidebar (laptop) */}
       <aside className="no-print fixed inset-y-0 left-0 z-30 hidden w-64 flex-col border-r border-emerald-900/10 bg-white lg:flex">
         <div className="flex items-center gap-3 px-5 py-5">
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-emerald-700 to-emerald-950 text-white shadow-md">
-            <GraduationCap className="h-6 w-6" />
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white shadow-md ring-2 ring-emerald-900/15">
+            <img src="/amu-logo.png" alt="AMU Logo" className="h-full w-full object-contain p-0.5" />
           </div>
           <div className="min-w-0">
             <p className="truncate text-sm font-extrabold leading-tight text-emerald-950">{HALL}</p>
@@ -94,8 +94,8 @@ export const AdminShell: React.FC<AdminShellProps> = ({ panelName, panelNote, na
       <header className="no-print sticky top-0 z-30 border-b border-emerald-900/10 bg-white lg:hidden">
         <div className="flex items-center justify-between gap-3 px-4 py-3">
           <div className="flex min-w-0 items-center gap-2.5">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-emerald-700 to-emerald-950 text-white">
-              <GraduationCap className="h-5 w-5" />
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white shadow-sm ring-1 ring-emerald-900/15">
+              <img src="/amu-logo.png" alt="AMU Logo" className="h-full w-full object-contain p-0.5" />
             </div>
             <div className="min-w-0">
               <p className="truncate text-sm font-extrabold leading-tight text-emerald-950">{HALL}</p>

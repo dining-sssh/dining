@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Bell, CalendarDays, Home, Receipt, UserRound, GraduationCap, Utensils } from 'lucide-react';
+import { Bell, CalendarDays, Home, Receipt, UserRound, Utensils } from 'lucide-react';
 import { HALL_NAME } from './studentUtils';
 
 /* ------------------------------------------------------------------ */
@@ -17,8 +17,12 @@ export const StudentHeader: React.FC<StudentHeaderProps> = React.memo(({ hasAler
   <header className="no-print relative pb-1 pt-1">
     <div className="flex items-center justify-between">
       <div className="flex items-center gap-2.5">
-        <div className="flex h-11 w-11 items-center justify-center rounded-full bg-gradient-to-br from-emerald-700 to-emerald-950 text-white shadow-md ring-2 ring-white">
-          <GraduationCap className="h-6 w-6" />
+        <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white shadow-md ring-2 ring-emerald-900/15">
+          <img
+            src="/amu-logo.png"
+            alt="Aligarh Muslim University"
+            className="h-full w-full object-contain p-0.5"
+          />
         </div>
         <div className="text-sm font-semibold leading-tight text-emerald-950">
           Aligarh Muslim
