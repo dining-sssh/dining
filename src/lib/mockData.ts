@@ -293,29 +293,40 @@ export function generateInitialExtensions(students: Student[]): GraceExtension[]
 
 /* ------------------------------------ menu and timings ------------------------------------ */
 
-const WEEK_LUNCH = [
-  'Rice, Dal Tadka, Aloo Gobhi, Salad',
-  'Roti, Rajma, Jeera Rice, Raita',
-  'Roti, Mix Veg, Dal Fry, Rice',
-  'Roti, Chole, Rice, Onion Salad',
-  'Roti, Kadhi Pakoda, Rice, Papad',
-  'Roti, Aloo Matar, Dal, Rice',
-  'Biryani, Raita, Salad'
+const WEEK_BREAKFAST = [
+  'Puri Sabzi, Halwa, Tea',
+  'Aloo Paratha, Curd, Tea',
+  'Puri Sabzi, Tea, Banana',
+  'Paneer Paratha, Curd, Tea',
+  'Bread Jam / Butter, Omelette / Boiled Egg, Tea',
+  'Chana Masala, Roti, Tea',
+  'Aloo Pyaaz Paratha, Curd, Tea'
 ];
+
+const WEEK_LUNCH = [
+  'Roti, Lauki Chana, Dal, Rice, Salad',
+  'Roti, Chole Masala, Jeera Rice, Onion Salad',
+  'Roti, Kadhi Pakoda, Steamed Rice, Papad',
+  'Roti, Aloo Matar Gobhi, Dal Tadka, Rice',
+  'Chicken Biryani / Veg Biryani, Boondi Raita, Salad',
+  'Roti, Dal Makhani, Jeera Rice, Gulab Jamun',
+  'Roti, Aloo Baingan, Mix Dal, Steamed Rice'
+];
+
 const WEEK_DINNER = [
-  'Roti, Chicken Qorma, Rice, Kheer',
-  'Roti, Paneer Masala, Dal, Rice',
-  'Roti, Egg Curry / Mix Dal, Rice',
-  'Roti, Mutton Curry, Rice, Sweet',
-  'Roti, Aloo Baingan, Dal, Rice',
-  'Roti, Lauki Chana, Dal, Rice',
-  'Roti, Dal Makhani, Jeera Rice, Halwa'
+  'Butter Chicken / Shahi Paneer, Rice, Dal, 4 Roti',
+  'Chicken Qorma / Matar Paneer, Steamed Rice, Kheer, Roti',
+  'Kadhai Paneer / Egg Curry, Dal Fry, Rice, Roti',
+  'Chicken Changezi / Malai Kofta, Pulao, Dal, Roti',
+  'Mutton Curry / Paneer Butter Masala, Rice, Roti, Sweet',
+  'Chicken Kalimirch / Dal Tadka, Jeera Rice, 4 Roti',
+  'Gosht / Channa Masala, Dal Makhani, Steamed Rice, Roti'
 ];
 
 export const INITIAL_MENU: MenuItem[] = [0, 1, 2, 3, 4, 5, 6].flatMap((weekday) => [
-  { weekday, meal: 'breakfast' as const, items: weekday === 0 ? 'Puri Sabzi, Tea' : 'Paratha, Curd, Tea' },
-  { weekday, meal: 'lunch' as const, items: WEEK_LUNCH[weekday] },
-  { weekday, meal: 'dinner' as const, items: WEEK_DINNER[weekday] }
+  { weekday, meal: 'breakfast', items: WEEK_BREAKFAST[weekday] },
+  { weekday, meal: 'lunch', items: WEEK_LUNCH[weekday] },
+  { weekday, meal: 'dinner', items: WEEK_DINNER[weekday] }
 ]);
 
 export const INITIAL_TIMINGS: DiningTiming[] = [

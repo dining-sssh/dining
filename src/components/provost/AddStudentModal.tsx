@@ -171,21 +171,18 @@ export const AddStudentModal: React.FC<AddStudentModalProps> = ({ isOpen, onClos
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <label className="block">
               <span className="mb-1 block text-xs font-semibold text-slate-700">Previous Hostel / House</span>
-              <input
-                type="text"
-                list="previous-hostels"
-                placeholder="e.g. HM, or none"
+              <select
                 value={previousHouse}
                 onChange={(e) => setPreviousHouse(e.target.value)}
-                className={FIELD}
-              />
-              <datalist id="previous-hostels">
+                className={`${FIELD} font-medium`}
+              >
+                <option value="">None / New Allotment</option>
                 {HOUSE_CODES.map((code) => (
                   <option key={code} value={code}>
-                    {HOSTEL_HOUSES[code].name}
+                    {code} – {HOSTEL_HOUSES[code].name}
                   </option>
                 ))}
-              </datalist>
+              </select>
             </label>
 
             <label className="block">

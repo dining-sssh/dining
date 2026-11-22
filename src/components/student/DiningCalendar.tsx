@@ -140,7 +140,7 @@ export const DiningCalendar: React.FC<DiningCalendarProps> = React.memo(({
               <b className="text-slate-800">
                 {selectedInfo.balanceAfter < 0
                   ? `${selectedInfo.balanceAfter} day${selectedInfo.balanceAfter === -1 ? '' : 's'}`
-                  : `${Math.round(selectedInfo.balanceAfter * 10) / 10} days left`}
+                  : `${Math.floor(selectedInfo.balanceAfter + 1e-9)} days left`}
               </b>
             </p>
           )}

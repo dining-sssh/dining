@@ -282,7 +282,7 @@ create policy slips_modify on public.payment_slips for update to authenticated
   using (public.is_provost()) with check (public.is_provost());
 drop policy if exists slips_delete on public.payment_slips;
 create policy slips_delete on public.payment_slips for delete to authenticated
-  using (public.is_provost());
+  using (public.is_staff());
 
 -- carried deficits
 drop policy if exists entries_read on public.deficit_entries;

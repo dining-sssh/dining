@@ -241,7 +241,7 @@ export function simulateAccount(input: EngineInput): AccountState {
     open = [];
     extra = 0; // a new run starts after a deposit
     totalPaid += slip.amount;
-    const credited = Math.max((slip.amount - mandatoryAmount - selectedAmount) / DAILY_RATE, 0);
+    const credited = Math.floor(Math.max((slip.amount - mandatoryAmount - selectedAmount) / DAILY_RATE, 0) + 1e-9);
     wallet += credited;
     slipResults.set(slip.id, {
       mandatoryDays,
@@ -393,13 +393,13 @@ export function previewSlip(state: AccountState, amount: number, settleMonths: s
   const mandatoryAmount = state.negativeAmount;
   const minimumAmount = mandatoryAmount + selectedAmount;
   const enough = amount + EPS >= minimumAmount;
-  const creditedDays = enough ? (amount - minimumAmount) / DAILY_RATE : 0;
+  const creditedDays = enough ? Math.floor((amount - minimumAmount) / DAILY_RATE + 1e-9) : 0;
   return {
     mandatoryDays: state.negativeDays,
     mandatoryAmount,
     selectedAmount,
     creditedDays,
-    totalDaysLeft: state.wallet + creditedDays,
+    totalDaysLeft: Math.floor(state.wallet + creditedDays + 1e-9),
     minimumAmount,
     enough
   };
@@ -407,10 +407,12 @@ export function previewSlip(state: AccountState, amount: number, settleMonths: s
 
 /* ------------------------------------ formatting ------------------------------------ */
 
-/** 12 -> "12", 12.4 -> "12.4", 12.03 -> "12". */
+/** Floor to whole integer days without decimal values (e.g., 12.4 -> "12", 12.9 -> "12"). */
 export const formatDays = (n: number): string => {
-  const rounded = Math.round(n * 10) / 10;
-  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
+  if (!Number.isFinite(n)) return '0';
+  const sign = n < 0 ? -1 : 1;
+  const floored = Math.floor(Math.abs(n) + 1e-9);
+  return String(sign * floored);
 };
 
 /** ₹46.67 for the daily rate, whole rupees for bigger sums. */

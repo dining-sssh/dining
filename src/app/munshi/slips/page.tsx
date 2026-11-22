@@ -2,7 +2,7 @@
 
 import React, { Suspense, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { AlertCircle, CheckCircle2, Download, Plus, Receipt, Search, X } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Download, Plus, Receipt, Search, Trash2, X } from 'lucide-react';
 import { PaymentSlip } from '@/types';
 import { DataService } from '@/lib/dataService';
 import { formatDMY, nextSlipNumbers } from '@/lib/billingUtils';
@@ -39,6 +39,8 @@ function SlipsView() {
 
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [infoMessage, setInfoMessage] = useState<string | null>(null);
   const [issued, setIssued] = useState<SlipData | null>(null);
   const [preview, setPreview] = useState<SlipData | null>(null);
   const [recentQuery, setRecentQuery] = useState('');
@@ -132,9 +134,47 @@ function SlipsView() {
     }
   };
 
+  const handleDeleteSlip = async (slip: PaymentSlip) => {
+    const owner = nameById.get(slip.student_id);
+    const slipLabel = `R. No. ${slip.slip_no} (${formatRupees(slip.amount)}) for ${owner?.name ?? slip.enrollment_no}`;
+    if (
+      !window.confirm(
+        `Revoke and delete slip ${slipLabel}?\n\nThis will permanently delete the slip and remove the credited days from the student's dining account.`
+      )
+    ) {
+      return;
+    }
+
+    setDeletingId(slip.id);
+    setError('');
+    try {
+      await DataService.deletePaymentSlip(slip.id);
+      if (preview?.slip.id === slip.id) setPreview(null);
+      if (issued?.slip.id === slip.id) setIssued(null);
+      await reload();
+      setInfoMessage(`Slip ${slipLabel} was revoked successfully.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not revoke slip.');
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
   return (
     <>
       <PageHeader title="Food charges slip" subtitle="Receive a deposit and cut the slip. It adds days to the student's dining balance." />
+
+      {infoMessage && (
+        <div className="fade-enter flex items-center justify-between gap-3 rounded-2xl border border-blue-200 bg-blue-50 p-3 text-xs font-semibold text-blue-900">
+          <p className="flex items-center gap-2">
+            <CheckCircle2 className="h-4 w-4 text-blue-600" />
+            {infoMessage}
+          </p>
+          <button type="button" onClick={() => setInfoMessage(null)} aria-label="Dismiss" className="press rounded-full p-1 text-blue-500 hover:bg-blue-100">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
 
       {issued && (
         <div className="fade-enter flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-3">
@@ -142,7 +182,7 @@ function SlipsView() {
             <CheckCircle2 className="h-4 w-4" />
             Slip R. No. {issued.slip.slip_no} for {issued.student.name} saved ({formatRupees(issued.slip.amount)}).
           </p>
-          <div className="flex gap-2">
+          <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={() => setPreview(issued)}
@@ -150,6 +190,15 @@ function SlipsView() {
             >
               <Download className="h-3.5 w-3.5" />
               View / download slip
+            </button>
+            <button
+              type="button"
+              disabled={deletingId === issued.slip.id}
+              onClick={() => handleDeleteSlip(issued.slip)}
+              className="press inline-flex items-center gap-1.5 rounded-full border border-rose-200 bg-rose-50 px-3.5 py-2 text-xs font-bold text-rose-700 hover:bg-rose-100 active:bg-rose-200 disabled:opacity-50"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              Revoke
             </button>
             <button type="button" onClick={() => setIssued(null)} aria-label="Dismiss" className="press rounded-full bg-white p-2 text-slate-500 ring-1 ring-slate-200">
               <X className="h-4 w-4" />
@@ -360,13 +409,14 @@ function SlipsView() {
             <ul className="divide-y divide-slate-100 overflow-hidden rounded-2xl border border-slate-200">
               {recent.map((s: PaymentSlip) => {
                 const owner = nameById.get(s.student_id);
+                const isDeleting = deletingId === s.id;
                 return (
-                  <li key={s.id}>
+                  <li key={s.id} className="flex items-center justify-between gap-1 p-1 hover:bg-slate-50">
                     <button
                       type="button"
-                      disabled={!owner}
+                      disabled={!owner || isDeleting}
                       onClick={() => owner && setPreview({ slip: s, student: owner })}
-                      className="press flex w-full items-center gap-3 px-3.5 py-3 text-left active:bg-emerald-50"
+                      className="press flex min-w-0 flex-1 items-center gap-3 rounded-xl px-2.5 py-2 text-left active:bg-emerald-50"
                     >
                       <span className="min-w-0 flex-1">
                         <span className="block truncate text-xs font-bold text-slate-900">{owner?.name ?? s.enrollment_no}</span>
@@ -376,6 +426,16 @@ function SlipsView() {
                       </span>
                       <Pill tone="emerald">{formatRupees(s.amount)}</Pill>
                     </button>
+                    <button
+                      type="button"
+                      disabled={isDeleting}
+                      onClick={() => handleDeleteSlip(s)}
+                      title="Revoke slip"
+                      aria-label={`Revoke slip R. No. ${s.slip_no}`}
+                      className="press rounded-full p-2 text-slate-400 hover:bg-rose-50 hover:text-rose-600 active:bg-rose-100 disabled:opacity-40"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
                   </li>
                 );
               })}
@@ -384,7 +444,7 @@ function SlipsView() {
         </Card>
       </div>
 
-      <SlipModal data={preview} onClose={() => setPreview(null)} />
+      <SlipModal data={preview} onClose={() => setPreview(null)} onDelete={handleDeleteSlip} />
     </>
   );
 }

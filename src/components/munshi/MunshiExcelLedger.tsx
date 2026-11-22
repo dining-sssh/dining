@@ -3,6 +3,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { AlertCircle, ChevronDown, ChevronRight, Edit2, FileSpreadsheet, Printer } from 'lucide-react';
 import { PaymentSlip, Student } from '@/types';
+import { DataService } from '@/lib/dataService';
 import { DAILY_RATE, DayInfo, DayKind, dayInfoFor, formatDays, formatRupees } from '@/lib/diningEngine';
 import { SlipData } from '@/lib/foodSlip';
 import { useAdminData } from '@/components/admin/AdminData';
@@ -36,7 +37,7 @@ const CELL: Record<DayKind, { code: string; style: string }> = {
 };
 
 export const MunshiExcelLedger: React.FC = () => {
-  const { students, accounts, slips, requests, todayKey } = useAdminData();
+  const { students, accounts, slips, requests, todayKey, reload } = useAdminData();
 
   const [selected, setSelected] = useState<Student | null>(null);
   const [session, setSession] = useState(() => sessionOfDate(todayKey));
@@ -45,6 +46,25 @@ export const MunshiExcelLedger: React.FC = () => {
   const [lookupError, setLookupError] = useState<string | null>(null);
   const [openMonth, setOpenMonth] = useState<string | null>(null);
   const [preview, setPreview] = useState<SlipData | null>(null);
+
+  const handleDeleteSlip = async (slip: PaymentSlip) => {
+    if (!selected) return;
+    const slipLabel = `R. No. ${slip.slip_no} (${formatRupees(slip.amount)}) for ${selected.name}`;
+    if (
+      !window.confirm(
+        `Revoke and delete slip ${slipLabel}?\n\nThis will permanently delete the slip and remove the credited days from the student's dining account.`
+      )
+    ) {
+      return;
+    }
+    try {
+      await DataService.deletePaymentSlip(slip.id);
+      setPreview(null);
+      await reload();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Could not revoke slip.');
+    }
+  };
 
   // Open the student from a link (?en=GQ0103), otherwise the first student.
   useEffect(() => {
@@ -144,7 +164,11 @@ export const MunshiExcelLedger: React.FC = () => {
 
   const prevSession = `${Number(session.split('-')[0]) - 1}-${Number(session.split('-')[0])}`;
   const sessionLabel = session.replace('-20', ' - ');
-  const balanceDays = state ? Math.round(state.balanceDays * 10) / 10 : 0;
+  const balanceDays = state
+    ? state.balanceDays < 0
+      ? -Math.floor(Math.abs(state.balanceDays) + 1e-9)
+      : Math.floor(state.balanceDays + 1e-9)
+    : 0;
 
   return (
     <div className="space-y-3">
@@ -446,8 +470,12 @@ export const MunshiExcelLedger: React.FC = () => {
                       <td className="border-r border-slate-300 bg-white p-1 font-mono font-semibold text-slate-800">
                         <div className="flex flex-col gap-0.5">
                           {row.slips.length === 0
-                            ? '0.00'
-                            : row.slips.map((s) => <span key={s.id}>{(state?.slipResults.get(s.id)?.creditedDays ?? s.amount / DAILY_RATE).toFixed(2)}</span>)}
+                            ? '0'
+                            : row.slips.map((s) => (
+                                <span key={s.id}>
+                                  {Math.floor((state?.slipResults.get(s.id)?.creditedDays ?? s.amount / DAILY_RATE) + 1e-9)}
+                                </span>
+                              ))}
                         </div>
                       </td>
                       <td className="border-r border-slate-300 bg-white p-1 font-mono font-semibold text-slate-800">
@@ -536,7 +564,7 @@ export const MunshiExcelLedger: React.FC = () => {
                 </td>
                 <td className="border-r-2 border-slate-400 bg-slate-200 p-1 text-center font-mono text-sm font-black text-slate-950">{totals.eaten}</td>
                 <td className="border-r border-slate-300 bg-slate-200 p-1 text-center font-mono text-xs font-black text-slate-950">
-                  {(totals.paidInSession / DAILY_RATE).toFixed(2)}
+                  {Math.floor(totals.paidInSession / DAILY_RATE + 1e-9)}
                 </td>
                 <td colSpan={4} className="bg-slate-100 p-1 pr-4 text-right font-serif text-xs text-slate-600">
                   Account balance: <span className="ml-1 font-mono text-sm font-black text-slate-900">{formatDays(balanceDays)} Days</span>
@@ -557,7 +585,7 @@ export const MunshiExcelLedger: React.FC = () => {
         </p>
       </div>
 
-      <SlipModal data={preview} onClose={() => setPreview(null)} />
+      <SlipModal data={preview} onClose={() => setPreview(null)} onDelete={handleDeleteSlip} />
     </div>
   );
 };

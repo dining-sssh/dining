@@ -205,63 +205,67 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({ enforcedStudentId,
         {/* key = tab, so each tab fades/slides in using transform + opacity only */}
         <div key={tab} className="tab-enter">
           {tab === 'home' && (
-            <div className="grid gap-4 lg:grid-cols-2 lg:items-start">
-              <div className="space-y-4">
-                <HeroBanner hero={hero} />
-                <DiningInfoStrip hero={hero} />
-                <BalanceCard state={state} onOpenBills={openBills} />
+            <div className="space-y-4">
+              <div className="grid gap-4 lg:grid-cols-2 lg:items-start">
+                <div className="space-y-4">
+                  <HeroBanner hero={hero} />
+                  <DiningInfoStrip hero={hero} />
+                  <BalanceCard state={state} onOpenBills={openBills} />
 
-                {isOff ? (
+                  {isOff ? (
+                    <button
+                      type="button"
+                      onClick={openOn}
+                      className="press flex w-full items-center justify-center gap-2 rounded-full bg-emerald-900 py-3 text-sm font-bold text-white shadow-sm"
+                    >
+                      <Send className="h-4 w-4" />
+                      Request to open dining
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={openOff}
+                      className="press flex w-full items-center justify-center gap-2 rounded-full bg-amber-400 py-3 text-sm font-bold text-emerald-950 shadow-sm"
+                    >
+                      <UtensilsCrossed className="h-4 w-4" />
+                      Dining off
+                    </button>
+                  )}
+
                   <button
                     type="button"
-                    onClick={openOn}
-                    className="press flex w-full items-center justify-center gap-2 rounded-full bg-emerald-900 py-3 text-sm font-bold text-white shadow-sm"
+                    onClick={openReview}
+                    className="press flex w-full items-center gap-3 rounded-2xl border border-amber-200 bg-gradient-to-r from-amber-50 to-emerald-50 p-3.5 text-left shadow-sm"
                   >
-                    <Send className="h-4 w-4" />
-                    Request to open dining
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-400 text-emerald-950 shadow-sm">
+                      <Star className="h-5 w-5 fill-emerald-950" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[11px] font-black uppercase tracking-wider text-emerald-900">
+                        Food & Cleanliness Review
+                      </p>
+                      <p className="mt-0.5 text-xs font-semibold text-slate-700">
+                        Rate today&apos;s taste, quality, quantity & cleanliness
+                      </p>
+                    </div>
+                    <ChevronRight className="h-5 w-5 text-slate-400" />
                   </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={openOff}
-                    className="press flex w-full items-center justify-center gap-2 rounded-full bg-amber-400 py-3 text-sm font-bold text-emerald-950 shadow-sm"
-                  >
-                    <UtensilsCrossed className="h-4 w-4" />
-                    Dining off
-                  </button>
-                )}
+                </div>
 
-                <button
-                  type="button"
-                  onClick={openReview}
-                  className="press flex w-full items-center gap-3 rounded-2xl border border-amber-200 bg-gradient-to-r from-amber-50 to-emerald-50 p-3.5 text-left shadow-sm"
-                >
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-400 text-emerald-950 shadow-sm">
-                    <Star className="h-5 w-5 fill-emerald-950" />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-[11px] font-black uppercase tracking-wider text-emerald-900">
-                      Food & Cleanliness Review
-                    </p>
-                    <p className="mt-0.5 text-xs font-semibold text-slate-700">
-                      Rate today&apos;s taste, quality, quantity & cleanliness
-                    </p>
-                  </div>
-                  <ChevronRight className="h-5 w-5 text-slate-400" />
-                </button>
+                <div className="space-y-4">
+                  <DiningCalendar
+                    monthKey={monthKey}
+                    todayKey={todayKey}
+                    resolve={resolve}
+                    selectedDate={selectedDate}
+                    onSelectDate={setSelectedDate}
+                    onMonthChange={handleMonthChange}
+                  />
+                </div>
               </div>
 
-              <div className="space-y-4">
-                <DiningCalendar
-                  monthKey={monthKey}
-                  todayKey={todayKey}
-                  resolve={resolve}
-                  selectedDate={selectedDate}
-                  onSelectDate={setSelectedDate}
-                  onMonthChange={handleMonthChange}
-                />
-                <MenuCard menu={menu} timings={timings} todayKey={todayKey} />
-              </div>
+              {/* Full-width Official Dining Hall Menu Table */}
+              <MenuCard menu={menu} timings={timings} todayKey={todayKey} />
             </div>
           )}
 

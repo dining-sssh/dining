@@ -361,6 +361,15 @@ export const DataService = {
     return created;
   },
 
+  async deletePaymentSlip(id: string): Promise<void> {
+    if (useDb()) {
+      await db.deleteSlip(id);
+      return;
+    }
+    const all = await this.getPaymentSlips();
+    setLocal(STORAGE_KEY_PAYMENTS, all.filter((s) => s.id !== id));
+  },
+
   // --- CARRIED DEFICITS ---
   async getDeficitEntries(): Promise<DeficitEntry[]> {
     if (useDb()) return safeRead('deficits', db.listEntries, []);

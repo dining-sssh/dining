@@ -16,8 +16,8 @@ export const HOSTEL_HOUSES: Record<HostelHouseCode, HostelHouseInfo> = {
   },
   JK: {
     code: 'JK',
-    name: 'JK hostel',
-    shortName: 'JK Hostel',
+    name: 'Jai Kishan house',
+    shortName: 'Jai Kishan House',
     color: 'bg-cyan-100 text-cyan-800 border-cyan-300'
   },
   MB: {

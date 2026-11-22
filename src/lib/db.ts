@@ -138,6 +138,11 @@ export async function insertSlip(slip: Omit<PaymentSlip, 'id'>): Promise<Payment
   return toSlip(data);
 }
 
+export async function deleteSlip(id: string): Promise<void> {
+  const { error } = await client().from('payment_slips').delete().eq('id', id);
+  fail(error);
+}
+
 /* -------------------------- carried deficits -------------------------- */
 
 const toEntry = (row: any): DeficitEntry => ({ ...clean(row), amount: Number(row.amount) });

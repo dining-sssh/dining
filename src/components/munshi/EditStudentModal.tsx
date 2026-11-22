@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { Save, X } from 'lucide-react';
-import { HOSTEL_HOUSES, HOUSE_CODES, Student } from '@/types';
+import { HOSTEL_HOUSES, HOUSE_CODES, HostelHouseCode, Student } from '@/types';
 import { DataService } from '@/lib/dataService';
 
 interface EditStudentModalProps {
@@ -95,20 +95,21 @@ export const EditStudentModal: React.FC<EditStudentModalProps> = ({ student, onC
           <div className="grid grid-cols-2 gap-3">
             <label className="block">
               <span className="mb-1 block text-xs font-semibold text-slate-700">Previous hostel</span>
-              <input
-                type="text"
-                list="edit-previous-hostels"
+              <select
                 value={previousHouse}
                 onChange={(e) => setPreviousHouse(e.target.value)}
-                className={FIELD}
-              />
-              <datalist id="edit-previous-hostels">
+                className={`${FIELD} font-medium`}
+              >
+                <option value="">None / New allotment</option>
+                {previousHouse && !HOUSE_CODES.includes(previousHouse as HostelHouseCode) && (
+                  <option value={previousHouse}>{previousHouse}</option>
+                )}
                 {HOUSE_CODES.map((code) => (
                   <option key={code} value={code}>
-                    {HOSTEL_HOUSES[code].name}
+                    {code} – {HOSTEL_HOUSES[code].name}
                   </option>
                 ))}
-              </datalist>
+              </select>
             </label>
             <label className="block">
               <span className="mb-1 block text-xs font-semibold text-slate-700">Previous room</span>

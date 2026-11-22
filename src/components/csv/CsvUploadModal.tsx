@@ -50,6 +50,7 @@ export const CsvUploadModal: React.FC<CsvUploadModalProps> = ({ isOpen, onClose,
     if (clean.startsWith('MB')) return 'MB';
 
     if (clean.includes('HASRAT')) return 'HM';
+    if (clean.includes('JAI KISHAN') || clean.includes('JAIKISHAN') || clean.includes('JAI-KISHAN')) return 'JK';
     if (clean.includes('BHOPAL')) return 'BH';
     if (clean.includes('QIDWAI')) return 'QH';
     if (clean.includes('KASHMIR')) return 'KH';

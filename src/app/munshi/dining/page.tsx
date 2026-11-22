@@ -42,6 +42,7 @@ function DiningControl() {
   const student = students.find((s) => s.id === studentId) ?? null;
   const state = student ? accounts.get(student.id) : undefined;
   const label = student ? diningLabel(student, state) : null;
+  const isClosed = state?.status === 'off';
 
   const byId = useMemo(() => new Map(students.map((s) => [s.id, s])), [students]);
   const pending = useMemo(
@@ -144,53 +145,59 @@ function DiningControl() {
       </Card>
 
       {student && (
-        <div className="grid gap-5 md:grid-cols-2">
-          <Card className="space-y-4">
-            <div>
-              <h2 className="flex items-center gap-2 text-sm font-bold text-rose-800">
-                <PowerOff className="h-4 w-4" />
-                Close dining
-              </h2>
-              <p className="text-xs text-slate-500">
-                Dining stays off from this date until you restart it. Any date works, including past days.
-              </p>
-            </div>
-            <Label text="Off from">
-              <input type="date" value={closeDate} onChange={(e) => setCloseDate(e.target.value)} className={INPUT} />
-            </Label>
-            <Label text="Reason">
-              <input value={closeReason} onChange={(e) => setCloseReason(e.target.value)} placeholder="e.g. Gone home" className={INPUT} />
-            </Label>
-            <button
-              type="button"
-              onClick={closeDining}
-              disabled={busy !== null || !closeDate}
-              className="press inline-flex w-full items-center justify-center gap-2 rounded-full bg-rose-600 px-4 py-3 text-sm font-bold text-white shadow-sm disabled:opacity-50"
-            >
-              <PowerOff className="h-4 w-4" />
-              {busy === 'close' ? 'Saving…' : 'Close dining'}
-            </button>
-          </Card>
-
-          <Card className="space-y-4">
-            <div>
-              <h2 className="flex items-center gap-2 text-sm font-bold text-emerald-800">
+        <div className="max-w-xl">
+          {isClosed ? (
+            <Card className="space-y-4">
+              <div>
+                <h2 className="flex items-center gap-2 text-sm font-bold text-emerald-800">
+                  <Power className="h-4 w-4" />
+                  Open dining
+                </h2>
+                <p className="text-xs text-slate-500">
+                  {state?.offSince
+                    ? `Dining is currently closed (off since ${formatLongDate(state.offSince)}). Open dining from this date.`
+                    : 'Dining is currently closed. Open dining from this date.'}
+                </p>
+              </div>
+              <Label text="Open from">
+                <input type="date" value={openDate} onChange={(e) => setOpenDate(e.target.value)} className={INPUT} />
+              </Label>
+              <Label text="Note (optional)">
+                <input value={openNote} onChange={(e) => setOpenNote(e.target.value)} placeholder="e.g. Back from home" className={INPUT} />
+              </Label>
+              <button type="button" onClick={restartDining} disabled={busy !== null || !openDate} className={`${BTN_PRIMARY} w-full py-3`}>
                 <Power className="h-4 w-4" />
-                Restart dining
-              </h2>
-              <p className="text-xs text-slate-500">Dining counts again from this date. Any date works.</p>
-            </div>
-            <Label text="Restart from">
-              <input type="date" value={openDate} onChange={(e) => setOpenDate(e.target.value)} className={INPUT} />
-            </Label>
-            <Label text="Note (optional)">
-              <input value={openNote} onChange={(e) => setOpenNote(e.target.value)} placeholder="e.g. Back from home" className={INPUT} />
-            </Label>
-            <button type="button" onClick={restartDining} disabled={busy !== null || !openDate} className={`${BTN_PRIMARY} w-full py-3`}>
-              <Power className="h-4 w-4" />
-              {busy === 'open' ? 'Saving…' : 'Restart dining'}
-            </button>
-          </Card>
+                {busy === 'open' ? 'Saving…' : 'Open dining'}
+              </button>
+            </Card>
+          ) : (
+            <Card className="space-y-4">
+              <div>
+                <h2 className="flex items-center gap-2 text-sm font-bold text-rose-800">
+                  <PowerOff className="h-4 w-4" />
+                  Close dining
+                </h2>
+                <p className="text-xs text-slate-500">
+                  Dining is currently open. It will stay off from this date until reopened. Any date works, including past days.
+                </p>
+              </div>
+              <Label text="Off from">
+                <input type="date" value={closeDate} onChange={(e) => setCloseDate(e.target.value)} className={INPUT} />
+              </Label>
+              <Label text="Reason">
+                <input value={closeReason} onChange={(e) => setCloseReason(e.target.value)} placeholder="e.g. Gone home" className={INPUT} />
+              </Label>
+              <button
+                type="button"
+                onClick={closeDining}
+                disabled={busy !== null || !closeDate}
+                className="press inline-flex w-full items-center justify-center gap-2 rounded-full bg-rose-600 px-4 py-3 text-sm font-bold text-white shadow-sm disabled:opacity-50"
+              >
+                <PowerOff className="h-4 w-4" />
+                {busy === 'close' ? 'Saving…' : 'Close dining'}
+              </button>
+            </Card>
+          )}
         </div>
       )}
 
