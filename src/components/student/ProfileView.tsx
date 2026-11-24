@@ -1,13 +1,14 @@
 'use client';
 
 import React from 'react';
-import { LogOut, Send, UtensilsCrossed } from 'lucide-react';
+import { Clock, LogOut, Send, UtensilsCrossed } from 'lucide-react';
 import { DiningRequest, HOSTEL_HOUSES, Student } from '@/types';
 import { formatLongDate } from './studentUtils';
 
 interface ProfileViewProps {
   student: Student;
   requests: DiningRequest[];
+  pendingRequest?: DiningRequest | null;
   /** Dining is currently off (closed), so the button asks to open it again. */
   isOff: boolean;
   onDiningOff: () => void;
@@ -21,7 +22,15 @@ const STATUS_TONE: Record<DiningRequest['status'], string> = {
   rejected: 'bg-rose-100 text-rose-800'
 };
 
-export const ProfileView: React.FC<ProfileViewProps> = ({ student, requests, isOff, onDiningOff, onDiningOn, onLogout }) => {
+export const ProfileView: React.FC<ProfileViewProps> = ({
+  student,
+  requests,
+  pendingRequest,
+  isOff,
+  onDiningOff,
+  onDiningOn,
+  onLogout
+}) => {
   const house = HOSTEL_HOUSES[student.house];
   const sorted = [...requests].sort((a, b) => b.created_at.localeCompare(a.created_at));
 
@@ -64,9 +73,16 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ student, requests, isO
         <div className="flex items-center justify-between gap-3">
           <div>
             <h3 className="text-base font-bold text-slate-900">Dining off / on</h3>
-            <p className="text-xs text-slate-500">Requests go to the Munshi</p>
+            <p className="text-xs text-slate-500">
+              {pendingRequest ? 'Request pending review by Munshi' : 'Requests go to the Munshi'}
+            </p>
           </div>
-          {isOff ? (
+          {pendingRequest ? (
+            <span className="flex shrink-0 items-center gap-1.5 rounded-full bg-amber-100 px-3 py-1.5 text-xs font-bold text-amber-900 ring-1 ring-amber-300">
+              <Clock className="h-3.5 w-3.5 animate-pulse text-amber-700" />
+              {pendingRequest.kind === 'off' ? 'Off Pending' : 'Open Pending'}
+            </span>
+          ) : isOff ? (
             <button
               type="button"
               onClick={onDiningOn}

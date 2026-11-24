@@ -27,7 +27,7 @@ import { StudentReviewsView } from './StudentReviewsView';
 import { DiningRequestModal, DiningRequestValues } from './DiningRequestModal';
 import { NotificationsSheet } from './NotificationsSheet';
 import { ReviewFormModal } from '../reviews/ReviewFormModal';
-import { buildNotices, computeHero, sessionOfDate, toDateKey } from './studentUtils';
+import { buildNotices, computeHero, formatLongDate, getReviewWindowStatus, sessionOfDate, toDateKey } from './studentUtils';
 
 interface StudentPortalProps {
   /** The logged-in student. The portal only ever shows this student's own record. */
@@ -137,6 +137,20 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({ enforcedStudentId,
     [state, requests, extensions, todayKey]
   );
   const hasAlerts = notices.some((n) => n.level !== 'info');
+  const pendingRequest = useMemo(
+    () => requests.find((r) => r.status === 'pending') ?? null,
+    [requests]
+  );
+  const ratedToday = useMemo(
+    () =>
+      reviews.some(
+        (r) =>
+          r.date === todayKey &&
+          (r.student_id === activeStudent?.id || r.enrollment_no === activeStudent?.enrollment_no)
+      ),
+    [reviews, todayKey, activeStudent]
+  );
+  const reviewWindow = useMemo(() => getReviewWindowStatus(), []);
 
   /* ------------------------------ handlers ------------------------------ */
 
@@ -164,8 +178,12 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({ enforcedStudentId,
   const openBills = useCallback(() => setTab('bills'), []);
   const openNotices = useCallback(() => setIsNoticesOpen(true), []);
   const closeNotices = useCallback(() => setIsNoticesOpen(false), []);
-  const openOff = useCallback(() => setRequestKind('off'), []);
-  const openOn = useCallback(() => setRequestKind('on'), []);
+  const openOff = useCallback(() => {
+    if (!pendingRequest) setRequestKind('off');
+  }, [pendingRequest]);
+  const openOn = useCallback(() => {
+    if (!pendingRequest) setRequestKind('on');
+  }, [pendingRequest]);
   const closeRequest = useCallback(() => setRequestKind(null), []);
   const openReview = useCallback(() => setIsReviewModalOpen(true), []);
   const closeReview = useCallback(() => setIsReviewModalOpen(false), []);
@@ -224,7 +242,37 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({ enforcedStudentId,
                   <DiningInfoStrip hero={hero} />
                   <BalanceCard state={state} onOpenBills={openBills} />
 
-                  {isOff ? (
+                  {pendingRequest ? (
+                    <div className="rounded-2xl border border-amber-200 bg-amber-50/90 p-4 shadow-sm">
+                      <div className="flex items-start gap-3">
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-400 text-emerald-950 shadow-sm">
+                          <Clock className="h-5 w-5 animate-pulse" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center justify-between gap-1.5">
+                            <h3 className="text-sm font-bold text-slate-900">
+                              {pendingRequest.kind === 'off' ? 'Dining Off Requested' : 'Open Dining Requested'}
+                            </h3>
+                            <span className="inline-flex items-center gap-1 rounded-full bg-amber-200/90 px-2.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wide text-amber-900">
+                              <span className="h-1.5 w-1.5 rounded-full bg-amber-600 animate-ping" />
+                              Under Review
+                            </span>
+                          </div>
+                          <p className="mt-1 text-xs text-slate-700">
+                            Effective from <span className="font-semibold text-slate-900">{formatLongDate(pendingRequest.start_date)}</span>
+                          </p>
+                          {pendingRequest.reason && (
+                            <p className="mt-1 text-xs italic text-slate-600">
+                              &ldquo;{pendingRequest.reason}&rdquo;
+                            </p>
+                          )}
+                          <p className="mt-2 text-[11px] font-medium text-amber-900/80">
+                            Your request is with the Munshi for approval.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  ) : isOff ? (
                     <button
                       type="button"
                       onClick={openOn}
@@ -253,11 +301,30 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({ enforcedStudentId,
                       <Star className="h-5 w-5 fill-emerald-950" />
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="text-[11px] font-black uppercase tracking-wider text-emerald-900">
-                        Food & Cleanliness Review
-                      </p>
+                      <div className="flex items-center gap-2">
+                        <p className="text-[11px] font-black uppercase tracking-wider text-emerald-900">
+                          Food & Cleanliness Review
+                        </p>
+                        {ratedToday ? (
+                          <span className="rounded-full bg-emerald-200/80 px-2 py-0.5 text-[9px] font-extrabold text-emerald-900">
+                            Rated today ✓
+                          </span>
+                        ) : reviewWindow.isOpen ? (
+                          <span className="rounded-full bg-amber-200/90 px-2 py-0.5 text-[9px] font-extrabold text-amber-900 animate-pulse">
+                            Open till 11:59 PM
+                          </span>
+                        ) : (
+                          <span className="rounded-full bg-slate-200/80 px-2 py-0.5 text-[9px] font-bold text-slate-600">
+                            Opens 12:00 PM
+                          </span>
+                        )}
+                      </div>
                       <p className="mt-0.5 text-xs font-semibold text-slate-700">
-                        Rate today&apos;s taste, quality, quantity & cleanliness
+                        {ratedToday
+                          ? "You have submitted today's review. Thank you!"
+                          : reviewWindow.isOpen
+                          ? `Review window open until 11:59 PM tonight (${reviewWindow.countdown})`
+                          : "Review opens from afternoon 12:00 PM to 11:59 PM"}
                       </p>
                     </div>
                     <ChevronRight className="h-5 w-5 text-slate-400" />
@@ -295,6 +362,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({ enforcedStudentId,
             <ProfileView
               student={activeStudent}
               requests={requests}
+              pendingRequest={pendingRequest}
               isOff={isOff}
               onDiningOff={openOff}
               onDiningOn={openOn}
@@ -321,6 +389,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({ enforcedStudentId,
         onClose={closeReview}
         onReviewSubmitted={handleReviewSubmitted}
         activeStudent={activeStudent}
+        ratedToday={ratedToday}
       />
     </div>
   );

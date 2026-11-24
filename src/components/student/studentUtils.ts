@@ -275,3 +275,58 @@ export function buildNotices(
 
   return notices;
 }
+
+export interface ReviewWindowStatus {
+  isOpen: boolean;
+  isBefore: boolean;
+  message: string;
+  countdown: string;
+  windowLabel: string;
+}
+
+/**
+ * Reviews are allowed for today from afternoon 12:00 PM (12:00) until night 11:59 PM (23:59:59).
+ */
+export function getReviewWindowStatus(now: Date = new Date()): ReviewWindowStatus {
+  const hours = now.getHours();
+  const minutes = now.getMinutes();
+  const current = hours * 60 + minutes;
+  const start = 12 * 60; // 12:00 PM (noon) = 720 mins
+  const end = 23 * 60 + 59;   // 11:59 PM = 1439 mins
+
+  if (current < start) {
+    const diff = start - current;
+    const h = Math.floor(diff / 60);
+    const m = diff % 60;
+    const timeStr = h > 0 ? `${h}h ${m}m` : `${m}m`;
+    return {
+      isOpen: false,
+      isBefore: true,
+      message: `Daily review opens this afternoon at 12:00 PM (in ${timeStr}).`,
+      countdown: `Opens in ${timeStr}`,
+      windowLabel: 'Opens 12:00 PM'
+    };
+  }
+
+  if (current <= end) {
+    const diff = end - current;
+    const h = Math.floor(diff / 60);
+    const m = diff % 60;
+    const timeStr = h > 0 ? `${h}h ${m}m` : `${m}m`;
+    return {
+      isOpen: true,
+      isBefore: false,
+      message: `Daily review window is open until 11:59 PM tonight (${timeStr} remaining).`,
+      countdown: `${timeStr} remaining`,
+      windowLabel: 'Closes 11:59 PM'
+    };
+  }
+
+  return {
+    isOpen: false,
+    isBefore: false,
+    message: "Today's review window closed at 11:59 PM. Tomorrow's review opens at 12:00 PM.",
+    countdown: 'Closed for today',
+    windowLabel: 'Closed at 11:59 PM'
+  };
+}

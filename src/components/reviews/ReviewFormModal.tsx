@@ -1,16 +1,17 @@
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
-import { X, CheckCircle2, MessageSquare, Utensils, Building2, Calendar } from 'lucide-react';
+import { X, CheckCircle2, MessageSquare, Utensils, Building2, Calendar, Clock } from 'lucide-react';
 import { RatingScale, HostelHouseCode, HOSTEL_HOUSES, FoodReview, Student } from '@/types';
 import { DataService } from '@/lib/dataService';
-import { toDateKey } from '../student/studentUtils';
+import { getReviewWindowStatus, toDateKey } from '../student/studentUtils';
 
 interface ReviewFormModalProps {
   open: boolean;
   onClose: () => void;
   onReviewSubmitted: (review: FoodReview) => void;
   activeStudent?: Student | null;
+  ratedToday?: boolean;
 }
 
 type CriterionKey = 'quality' | 'quantity' | 'taste' | 'cleanliness';
@@ -46,12 +47,6 @@ const RATINGS: Array<{ rating: RatingScale; label: string }> = [
   { rating: 5, label: 'Excellent' }
 ];
 
-const MEALS: Array<{ id: 'lunch' | 'dinner' | 'all_day'; label: string }> = [
-  { id: 'lunch', label: 'Lunch' },
-  { id: 'dinner', label: 'Dinner' },
-  { id: 'all_day', label: 'Whole day' }
-];
-
 const sentimentFor = (score: number) => {
   if (score >= 4.5) return { text: 'Exceptional', color: 'text-emerald-700 bg-emerald-100' };
   if (score >= 3.8) return { text: 'Good', color: 'text-teal-700 bg-teal-100' };
@@ -63,9 +58,10 @@ export const ReviewFormModal: React.FC<ReviewFormModalProps> = ({
   open,
   onClose,
   onReviewSubmitted,
-  activeStudent
+  activeStudent,
+  ratedToday = false
 }) => {
-  const [mealType, setMealType] = useState<'lunch' | 'dinner' | 'all_day'>('lunch');
+  const mealType = 'dinner';
   const [ratings, setRatings] = useState<Record<CriterionKey, RatingScale>>({
     quality: 4,
     quantity: 4,
@@ -81,7 +77,6 @@ export const ReviewFormModal: React.FC<ReviewFormModalProps> = ({
   // Fresh form each time it opens.
   useEffect(() => {
     if (open) {
-      setMealType('lunch');
       setRatings({ quality: 4, quantity: 4, taste: 4, cleanliness: 4 });
       setSelectedHouse(activeStudent?.house || 'HM');
       setComments('');
@@ -98,6 +93,7 @@ export const ReviewFormModal: React.FC<ReviewFormModalProps> = ({
   const now = new Date();
   const dateKey = toDateKey(now);
   const formattedToday = now.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+  const windowStatus = getReviewWindowStatus(now);
 
   const computedOverall = Number(
     ((ratings.quality + ratings.quantity + ratings.taste + ratings.cleanliness) / 4).toFixed(1)
@@ -174,11 +170,50 @@ export const ReviewFormModal: React.FC<ReviewFormModalProps> = ({
               Thank you. Your ratings now count in the hall&apos;s daily score and the house cleanliness ranking.
             </p>
           </div>
+        ) : ratedToday ? (
+          <div className="space-y-4 p-8 text-center">
+            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100 text-emerald-700">
+              <CheckCircle2 className="h-10 w-10" />
+            </div>
+            <h3 className="text-lg font-bold text-slate-900">Already reviewed today</h3>
+            <p className="mx-auto max-w-sm text-xs leading-relaxed text-slate-600">
+              You have already submitted your review for today ({formattedToday}). Reviews are limited to once per resident each night.
+            </p>
+            <button
+              type="button"
+              onClick={onClose}
+              className="press rounded-full bg-emerald-900 px-6 py-2.5 text-xs font-bold text-white shadow"
+            >
+              Close
+            </button>
+          </div>
+        ) : !windowStatus.isOpen ? (
+          <div className="space-y-4 p-8 text-center">
+            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-amber-100 text-amber-800">
+              <Clock className="h-10 w-10" />
+            </div>
+            <h3 className="text-lg font-bold text-slate-900">Review window is closed</h3>
+            <p className="mx-auto max-w-sm text-xs leading-relaxed text-slate-600">
+              Residents can submit reviews for today&apos;s meal and cleanliness from 12:00 PM afternoon until 11:59 PM at night.
+            </p>
+            <div className="mx-auto inline-block rounded-full bg-amber-100 px-4 py-1.5 text-xs font-bold text-amber-950">
+              {windowStatus.message}
+            </div>
+            <div>
+              <button
+                type="button"
+                onClick={onClose}
+                className="press mt-3 rounded-full bg-slate-900 px-6 py-2.5 text-xs font-bold text-white shadow"
+              >
+                Close
+              </button>
+            </div>
+          </div>
         ) : (
           <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
             <div className="flex-1 space-y-5 overflow-y-auto p-4 sm:p-6">
-              {/* Date + meal */}
-              <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-3 text-xs">
+              {/* Date & meal banner (fixed to today's date, not option type) */}
+              <div className="space-y-2 rounded-2xl border border-slate-200 bg-slate-50 p-3 text-xs">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="flex items-center gap-1.5 font-bold text-slate-800">
                     <Calendar className="h-4 w-4 text-emerald-700" />
@@ -188,20 +223,14 @@ export const ReviewFormModal: React.FC<ReviewFormModalProps> = ({
                     {activeStudent ? `${activeStudent.name} (${activeStudent.house})` : 'Student resident'}
                   </span>
                 </div>
-                <div className="grid grid-cols-3 gap-1 rounded-full bg-slate-200/70 p-1 font-bold">
-                  {MEALS.map((m) => (
-                    <button
-                      key={m.id}
-                      type="button"
-                      onClick={() => setMealType(m.id)}
-                      aria-pressed={mealType === m.id}
-                      className={`press rounded-full py-2 transition-colors ${
-                        mealType === m.id ? 'bg-white text-emerald-950 shadow' : 'text-slate-600'
-                      }`}
-                    >
-                      {m.label}
-                    </button>
-                  ))}
+                <div className="flex items-center justify-between rounded-xl bg-emerald-50 px-3.5 py-2 text-emerald-950">
+                  <div className="flex items-center gap-2 font-bold text-xs">
+                    <Utensils className="h-4 w-4 text-emerald-800" />
+                    Dinner & Hall Cleanliness
+                  </div>
+                  <span className="rounded-full bg-emerald-200/90 px-2.5 py-0.5 text-[10px] font-extrabold text-emerald-900">
+                    Open till 11:59 PM
+                  </span>
                 </div>
               </div>
 
