@@ -4,7 +4,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { AlertCircle, ChevronDown, ChevronRight, Edit2, FileSpreadsheet, Printer } from 'lucide-react';
 import { PaymentSlip, Student } from '@/types';
 import { DataService } from '@/lib/dataService';
-import { DAILY_RATE, DayInfo, DayKind, dayInfoFor, formatDays, formatRupees } from '@/lib/diningEngine';
+import { DAILY_RATE, DayInfo, DayKind, dayInfoFor, formatDays, formatRupees, simulateAccount } from '@/lib/diningEngine';
 import { isPrintableSlip, paymentLabel } from '@/lib/billingUtils';
 import { SlipData } from '@/lib/foodSlip';
 import { useAdminData } from '@/components/admin/AdminData';
@@ -29,7 +29,7 @@ const inr = (n: number) => `₹${Math.round(n).toLocaleString('en-IN')}`;
 
 const CELL: Record<DayKind, { code: string; style: string }> = {
   eaten: { code: '1', style: 'bg-[#c6efce] text-[#006100]' },
-  deficit: { code: 'D', style: 'bg-orange-300 text-orange-950' },
+  deficit: { code: 'N', style: 'bg-orange-300 text-orange-950' },
   off: { code: 'O', style: 'bg-amber-200 text-amber-950' },
   stopped: { code: 'S', style: 'bg-[#ffc7ce] text-[#9c0006]' },
   closed: { code: 'C', style: 'bg-sky-100 text-sky-800' },
@@ -39,7 +39,7 @@ const CELL: Record<DayKind, { code: string; style: string }> = {
 };
 
 export const MunshiExcelLedger: React.FC = () => {
-  const { students, accounts, slips, requests, todayKey, reload } = useAdminData();
+  const { students, accounts, slips, requests, entries, extensions, closedDays, todayKey, reload } = useAdminData();
 
   const [selected, setSelected] = useState<Student | null>(null);
   const [session, setSession] = useState(() => sessionOfDate(todayKey));
@@ -107,15 +107,62 @@ export const MunshiExcelLedger: React.FC = () => {
     return students.filter((s) => s.enrollment_no.toUpperCase().includes(q)).slice(0, 8);
   }, [students, badgeInput]);
 
-  const state = selected ? accounts.get(selected.id) : undefined;
+  const currentSession = useMemo(() => sessionOfDate(todayKey), [todayKey]);
+  const [pastHistory, setPastHistory] = useState<{
+    studentId: string;
+    requests: typeof requests;
+    slips: typeof slips;
+    extensions: typeof extensions;
+  } | null>(null);
+
+  // When viewing a past session, fetch only the selected student's full history on demand.
+  useEffect(() => {
+    if (!selected || session === currentSession) return;
+    if (pastHistory?.studentId === selected.id) return;
+    let cancelled = false;
+    Promise.all([
+      DataService.getDiningRequests({ studentId: selected.id }),
+      DataService.getPaymentSlips({ studentId: selected.id }),
+      DataService.getGraceExtensions({ studentId: selected.id })
+    ]).then(([rq, sl, ex]) => {
+      if (!cancelled) setPastHistory({ studentId: selected.id, requests: rq, slips: sl, extensions: ex });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [selected, session, currentSession, pastHistory?.studentId]);
+
+  const activeHistory = session !== currentSession && pastHistory?.studentId === selected?.id ? pastHistory : null;
   const studentSlips = useMemo(
-    () => (selected ? slips.filter((s) => s.student_id === selected.id) : []),
-    [slips, selected]
+    () => (activeHistory ? activeHistory.slips : selected ? slips.filter((s) => s.student_id === selected.id) : []),
+    [activeHistory, slips, selected]
   );
   const studentRequests = useMemo(
-    () => (selected ? requests.filter((r) => r.student_id === selected.id) : []),
-    [requests, selected]
+    () => (activeHistory ? activeHistory.requests : selected ? requests.filter((r) => r.student_id === selected.id) : []),
+    [activeHistory, requests, selected]
   );
+  const studentExtensions = useMemo(
+    () => (activeHistory ? activeHistory.extensions : selected ? extensions.filter((e) => e.student_id === selected.id) : []),
+    [activeHistory, extensions, selected]
+  );
+
+  const state = useMemo(() => {
+    if (!selected) return undefined;
+    if (session === currentSession) return accounts.get(selected.id);
+    // When viewing a past session, simulate that session's August–May window independently.
+    const startYear = Number(session.split('-')[0]);
+    const sessionStart = `${startYear}-08-01`;
+    const sessionEnd = `${startYear + 1}-05-31`;
+    return simulateAccount({
+      student: { dining_from: sessionStart },
+      requests: studentRequests,
+      slips: studentSlips,
+      extensions: studentExtensions,
+      entries: entries.filter((e) => e.student_id === selected.id),
+      closedDates: closedDays.map((c) => c.day),
+      todayKey: sessionEnd < todayKey ? sessionEnd : todayKey
+    });
+  }, [selected, session, currentSession, accounts, studentRequests, studentSlips, studentExtensions, entries, closedDays, todayKey]);
 
   const months = useMemo(() => sessionMonths(session), [session]);
 
@@ -587,7 +634,7 @@ export const MunshiExcelLedger: React.FC = () => {
         </div>
 
         <p className="no-print mt-3 text-[11px] text-slate-500">
-          <b>1</b> dined · <b>D</b> dined on a deficit day · <b>O</b> dining off · <b>S</b> dining stopped (grace used up) · <b>C</b> hall closed ·{' '}
+          <b>1</b> dined · <b>N</b> negative day (dined on deficit) · <b>O</b> dining off · <b>S</b> dining stopped (grace used up) · <b>C</b> hall closed ·{' '}
           <b>·</b> no dining that day. Click a month to see its deficit day by day. This sheet is read only; payments are added with{' '}
           <b>Cut Slip</b>.
         </p>

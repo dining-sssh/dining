@@ -1,0 +1,40 @@
+=== Deficit Import Report ===
+Generated: 2026-11-26T10:32:06.897Z
+Output dir: C:\Users\AARIF\Desktop\Dining\dining\supabase\imports\deficit
+
+
+=== 23-24 (2023-2024) ===
+  File: dining old data/23-24_deficit.xlsx
+  Month columns: 2023-08, 2023-09, 2023-10, 2023-11, 2023-12, 2024-01, 2024-02, 2024-03, 2024-04, 2024-05, 2024-06
+  Ramzan col: idx 17
+  Total students: 944
+  Fully paid (skipped): 716
+  Deficit entries generated: 468
+  SQL files: deficit_2023-2024_01.sql
+
+=== 24-25 (2024-2025) ===
+  File: dining old data/24-25_deficit.xlsx
+  Month columns: 2024-08, 2024-09, 2024-10, 2024-11, 2024-12, 2025-01, 2025-02, 2025-03, 2025-04, 2025-05, 2025-06
+  Ramzan col: none
+  Total students: 844
+  Fully paid (skipped): 733
+  Deficit entries generated: 552
+  SQL files: deficit_2024-2025_01.sql, deficit_2024-2025_02.sql
+
+=== 25-26 (2025-2026) ===
+  File: dining old data/25-26_deficit.xlsx
+  Month columns: 2025-08, 2025-09, 2025-10, 2025-11, 2025-12, 2026-01, 2026-02, 2026-03, 2026-04, 2026-05, 2026-06, 2026-07
+  Ramzan col: idx 18
+  Total students: 758
+  Fully paid (skipped): 633
+  Deficit entries generated: 282
+  SQL files: deficit_2025-2026_01.sql
+
+All files written: deficit_2023-2024_01.sql, deficit_2024-2025_01.sql, deficit_2024-2025_02.sql, deficit_2025-2026_01.sql
+
+HOW TO USE:
+1. Run supabase/schema.sql first (if not done already).
+2. Import students (run supabase/imports/*/01_students.sql files).
+3. Run each deficit_*.sql file in Supabase SQL Editor in order.
+4. The deficit_entries rows will appear in each student account.
+   The app engine uses them as "carried deficit" from old registers.

@@ -269,9 +269,10 @@ export const DataService = {
   },
 
   // --- DINING ON / OFF REQUESTS ---
-  async getDiningRequests(): Promise<DiningRequest[]> {
-    if (useDb()) return safeRead('dining requests', db.listRequests, []);
-    return getLocal<DiningRequest[]>(STORAGE_KEY_REQUESTS, () => generateInitialRequests(INITIAL_STUDENTS));
+  async getDiningRequests(opts: { fromDate?: string; studentId?: string } = {}): Promise<DiningRequest[]> {
+    if (useDb()) return safeRead('dining requests', () => db.listRequests(opts), []);
+    const all = getLocal<DiningRequest[]>(STORAGE_KEY_REQUESTS, () => generateInitialRequests(INITIAL_STUDENTS));
+    return opts.studentId ? all.filter((r) => r.student_id === opts.studentId) : all;
   },
 
   /** A student asks to close dining (from a date, until restarted) or to open it again. Waits for the Munshi. */
@@ -342,9 +343,10 @@ export const DataService = {
   },
 
   // --- PAYMENT SLIPS (Food Charges Slips) ---
-  async getPaymentSlips(): Promise<PaymentSlip[]> {
-    if (useDb()) return safeRead('slips', () => db.listSlips(), []);
-    return getLocal<PaymentSlip[]>(STORAGE_KEY_PAYMENTS, () => generateInitialSlips(INITIAL_STUDENTS));
+  async getPaymentSlips(opts: { fromDate?: string; studentId?: string } = {}): Promise<PaymentSlip[]> {
+    if (useDb()) return safeRead('slips', () => db.listSlips(opts), []);
+    const all = getLocal<PaymentSlip[]>(STORAGE_KEY_PAYMENTS, () => generateInitialSlips(INITIAL_STUDENTS));
+    return opts.studentId ? all.filter((s) => s.student_id === opts.studentId) : all;
   },
 
   async getPaymentSlipsForStudent(enrollmentNo: string): Promise<PaymentSlip[]> {
@@ -389,9 +391,10 @@ export const DataService = {
   },
 
   // --- GRACE EXTENSIONS (Provost approves, Munshi applies) ---
-  async getGraceExtensions(): Promise<GraceExtension[]> {
-    if (useDb()) return safeRead('extensions', db.listExtensions, []);
-    return getLocal<GraceExtension[]>(STORAGE_KEY_EXTENSIONS, () => generateInitialExtensions(INITIAL_STUDENTS));
+  async getGraceExtensions(opts: { fromDate?: string; studentId?: string } = {}): Promise<GraceExtension[]> {
+    if (useDb()) return safeRead('extensions', () => db.listExtensions(opts), []);
+    const all = getLocal<GraceExtension[]>(STORAGE_KEY_EXTENSIONS, () => generateInitialExtensions(INITIAL_STUDENTS));
+    return opts.studentId ? all.filter((e) => e.student_id === opts.studentId) : all;
   },
 
   /** Provost approves more grace days. It goes to the Munshi, who applies it. */

@@ -1,0 +1,68 @@
+-- Deficit entries from 24-25 sheet (2024-2025)
+-- Part 2: rows 501–552
+-- Run after students are imported. Safe to run twice (ON CONFLICT DO NOTHING).
+
+insert into public.deficit_entries (id, student_id, enrollment_no, month_key, amount, note)
+select
+  v.id,
+  s.id,
+  s.enrollment_no,
+  v.month_key,
+  v.amount::numeric,
+  v.note
+from (values
+  ('DE-GI7281-202408', 'GI7281', '2024-08', 290, 'Imported from 24-25 sheet'),
+  ('DE-GI7281-202409', 'GI7281', '2024-09', 325, 'Imported from 24-25 sheet'),
+  ('DE-GI7281-202410', 'GI7281', '2024-10', 280, 'Imported from 24-25 sheet'),
+  ('DE-GI7281-202411', 'GI7281', '2024-11', 275, 'Imported from 24-25 sheet'),
+  ('DE-GI7281-202412', 'GI7281', '2024-12', 210, 'Imported from 24-25 sheet'),
+  ('DE-GI7281-202501', 'GI7281', '2025-01', 140, 'Imported from 24-25 sheet'),
+  ('DE-GI7281-202502', 'GI7281', '2025-02', 350, 'Imported from 24-25 sheet'),
+  ('DE-GI7281-202503', 'GI7281', '2025-03', 1057, 'Imported from 24-25 sheet'),
+  ('DE-GI7281-202504', 'GI7281', '2025-04', 340, 'Imported from 24-25 sheet'),
+  ('DE-GI7281-202505', 'GI7281', '2025-05', 390, 'Imported from 24-25 sheet'),
+  ('DE-GK8820-202409', 'GK8820', '2024-09', 325, 'Imported from 24-25 sheet'),
+  ('DE-GK8820-202410', 'GK8820', '2024-10', 280, 'Imported from 24-25 sheet'),
+  ('DE-GK8820-202411', 'GK8820', '2024-11', 275, 'Imported from 24-25 sheet'),
+  ('DE-GK8820-202501', 'GK8820', '2025-01', 140, 'Imported from 24-25 sheet'),
+  ('DE-GK8820-202502', 'GK8820', '2025-02', 350, 'Imported from 24-25 sheet'),
+  ('DE-GK8820-202504', 'GK8820', '2025-04', 340, 'Imported from 24-25 sheet'),
+  ('DE-GK8820-202505', 'GK8820', '2025-05', 390, 'Imported from 24-25 sheet'),
+  ('DE-GK8820-202506', 'GK8820', '2025-06', 105, 'Imported from 24-25 sheet'),
+  ('DE-GJ4519-202410', 'GJ4519', '2024-10', 280, 'Imported from 24-25 sheet'),
+  ('DE-GJ4519-202411', 'GJ4519', '2024-11', 275, 'Imported from 24-25 sheet'),
+  ('DE-GJ4519-202412', 'GJ4519', '2024-12', 210, 'Imported from 24-25 sheet'),
+  ('DE-GJ4519-202501', 'GJ4519', '2025-01', 140, 'Imported from 24-25 sheet'),
+  ('DE-GJ4519-202502', 'GJ4519', '2025-02', 350, 'Imported from 24-25 sheet'),
+  ('DE-GJ4519-202503', 'GJ4519', '2025-03', 237, 'Imported from 24-25 sheet'),
+  ('DE-GJ4519-202504', 'GJ4519', '2025-04', 340, 'Imported from 24-25 sheet'),
+  ('DE-GJ4519-202505', 'GJ4519', '2025-05', 390, 'Imported from 24-25 sheet'),
+  ('DE-GH3804-202408', 'GH3804', '2024-08', 290, 'Imported from 24-25 sheet'),
+  ('DE-GH3804-202409', 'GH3804', '2024-09', 325, 'Imported from 24-25 sheet'),
+  ('DE-GH3804-202410', 'GH3804', '2024-10', 280, 'Imported from 24-25 sheet'),
+  ('DE-GQ2918-202408', 'GQ2918', '2024-08', 290, 'Imported from 24-25 sheet'),
+  ('DE-GE4823-202408', 'GE4823', '2024-08', 290, 'Imported from 24-25 sheet'),
+  ('DE-GE4823-202409', 'GE4823', '2024-09', 325, 'Imported from 24-25 sheet'),
+  ('DE-GE4823-202410', 'GE4823', '2024-10', 280, 'Imported from 24-25 sheet'),
+  ('DE-GE4823-202411', 'GE4823', '2024-11', 275, 'Imported from 24-25 sheet'),
+  ('DE-GE4823-202412', 'GE4823', '2024-12', 210, 'Imported from 24-25 sheet'),
+  ('DE-GE4823-202501', 'GE4823', '2025-01', 140, 'Imported from 24-25 sheet'),
+  ('DE-GE4823-202502', 'GE4823', '2025-02', 350, 'Imported from 24-25 sheet'),
+  ('DE-GE4823-202504', 'GE4823', '2025-04', 340, 'Imported from 24-25 sheet'),
+  ('DE-GH6258-202408', 'GH6258', '2024-08', 290, 'Imported from 24-25 sheet'),
+  ('DE-GH6258-202409', 'GH6258', '2024-09', 325, 'Imported from 24-25 sheet'),
+  ('DE-GH6258-202410', 'GH6258', '2024-10', 280, 'Imported from 24-25 sheet'),
+  ('DE-GH6258-202412', 'GH6258', '2024-12', 210, 'Imported from 24-25 sheet'),
+  ('DE-GH6258-202501', 'GH6258', '2025-01', 140, 'Imported from 24-25 sheet'),
+  ('DE-GH6258-202502', 'GH6258', '2025-02', 350, 'Imported from 24-25 sheet'),
+  ('DE-GI2650-202408', 'GI2650', '2024-08', 290, 'Imported from 24-25 sheet'),
+  ('DE-GI2650-202409', 'GI2650', '2024-09', 325, 'Imported from 24-25 sheet'),
+  ('DE-GH6238-202408', 'GH6238', '2024-08', 290, 'Imported from 24-25 sheet'),
+  ('DE-GH6238-202409', 'GH6238', '2024-09', 325, 'Imported from 24-25 sheet'),
+  ('DE-GH6238-202410', 'GH6238', '2024-10', 280, 'Imported from 24-25 sheet'),
+  ('DE-GH6238-202412', 'GH6238', '2024-12', 210, 'Imported from 24-25 sheet'),
+  ('DE-GH6238-202501', 'GH6238', '2025-01', 140, 'Imported from 24-25 sheet'),
+  ('DE-GH6238-202502', 'GH6238', '2025-02', 350, 'Imported from 24-25 sheet')
+) as v(id, enr, month_key, amount, note)
+join public.students s on upper(s.enrollment_no) = upper(v.enr)
+on conflict (id) do nothing;

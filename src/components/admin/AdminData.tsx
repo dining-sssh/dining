@@ -12,7 +12,7 @@ import {
   Student
 } from '@/types';
 import { DataService } from '@/lib/dataService';
-import { AccountState, isDiningActive, simulateAccount } from '@/lib/diningEngine';
+import { AccountState, isDiningActive, sessionOfDate, simulateAccount } from '@/lib/diningEngine';
 import { toDateKey } from '../student/studentUtils';
 
 interface AdminDataValue {
@@ -58,6 +58,7 @@ const groupBy = <T extends { student_id: string }>(list: T[]): Map<string, T[]> 
 export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const todayKey = useMemo(() => toDateKey(new Date()), []);
   const [loaded, setLoaded] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [students, setStudents] = useState<Student[]>([]);
   const [requests, setRequests] = useState<DiningRequest[]>([]);
   const [slips, setSlips] = useState<PaymentSlip[]>([]);
@@ -68,25 +69,37 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [todayReview, setTodayReview] = useState<DailyReviewSummary | null>(null);
 
   const reload = useCallback(async () => {
-    const [st, rq, sl, en, ex, cl, stg, review] = await Promise.all([
-      DataService.getStudents(),
-      DataService.getDiningRequests(),
-      DataService.getPaymentSlips(),
-      DataService.getDeficitEntries(),
-      DataService.getGraceExtensions(),
-      DataService.getClosedDays(),
-      DataService.getSettings(),
-      DataService.getDailyReviewSummary(toDateKey(new Date()))
-    ]);
-    setStudents(st);
-    setRequests(rq);
-    setSlips(sl);
-    setEntries(en);
-    setExtensions(ex);
-    setClosedDays(cl);
-    setSettings(stg);
-    setTodayReview(review);
-    setLoaded(true);
+    setError(null);
+    try {
+      const today = toDateKey(new Date());
+      const sessionStartYear = Number(sessionOfDate(today).split('-')[0]);
+      const fromDate = `${sessionStartYear}-06-01`;
+
+      const [st, rq, sl, en, ex, cl, stg, review] = await Promise.all([
+        DataService.getStudents({ strict: true }),
+        DataService.getDiningRequests({ fromDate }),
+        DataService.getPaymentSlips({ fromDate }),
+        DataService.getDeficitEntries(),
+        DataService.getGraceExtensions({ fromDate }),
+        DataService.getClosedDays(),
+        DataService.getSettings(),
+        DataService.getDailyReviewSummary(today)
+      ]);
+      setStudents(st);
+      setRequests(rq);
+      setSlips(sl);
+      setEntries(en);
+      setExtensions(ex);
+      setClosedDays(cl);
+      setSettings(stg);
+      setTodayReview(review);
+      setLoaded(true);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to load data from database.';
+      console.error('AdminData reload failed:', err);
+      setError(msg);
+      setLoaded(true);
+    }
   }, []);
 
   useEffect(() => {
@@ -146,5 +159,27 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     [loaded, todayKey, students, requests, slips, entries, extensions, closedDays, settings, todayReview, accounts, totalPending, totalReceived, activeCount, reload]
   );
 
-  return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
+  return (
+    <Ctx.Provider value={value}>
+      {error && (
+        <div role="alert" className="no-print fixed bottom-4 right-4 z-50 max-w-md rounded-2xl border border-rose-300 bg-rose-50 p-4 text-xs text-rose-900 shadow-xl">
+          <p className="font-bold">Database load error</p>
+          <p className="mt-1 break-words text-rose-700">{error}</p>
+          <button
+            type="button"
+            onClick={() => reload()}
+            className="mt-2 rounded-lg bg-rose-700 px-3 py-1 font-bold text-white hover:bg-rose-800"
+          >
+            Retry
+          </button>
+        </div>
+      )}
+      {!loaded && !error && (
+        <div className="no-print fixed bottom-4 right-4 z-50 rounded-full border border-emerald-200 bg-white px-4 py-2 text-xs font-semibold text-emerald-900 shadow-lg">
+          Loading data from database…
+        </div>
+      )}
+      {children}
+    </Ctx.Provider>
+  );
 };

@@ -26,18 +26,28 @@ const XLSX = require('xlsx');
 const ts = require('typescript');
 
 const ROOT = path.resolve(__dirname, '..');
-const [, , fileArg, sheetArg, outArg] = process.argv;
+const [, , fileArg, sheetArg, outArg, sessionOverride] = process.argv;
 if (!fileArg || !sheetArg) {
-  console.error('Usage: node scripts/import-dining-sheet.js <file.xlsx> <sheet e.g. 2026-27> [outDir]');
+  console.error('Usage: node scripts/import-dining-sheet.js <file.xlsx> <sheet e.g. 2026-27 or Sheet1> [outDir] [sessionOverride e.g. 2025-2026]');
   process.exit(1);
 }
-const m = /^(\d{4})-(\d{2}|\d{4})$/.exec(sheetArg.trim());
-if (!m) {
-  console.error('Sheet name must look like 2026-27');
+// sheetArg may be a year-range like "2026-27" OR a literal sheet name like "Sheet1"
+// When it's a literal sheet name, sessionOverride must supply the session year.
+const yearMatch = /^(\d{4})-(\d{2}|\d{4})$/.exec(sheetArg.trim());
+let startYear, SESSION;
+if (yearMatch) {
+  startYear = Number(yearMatch[1]);
+  SESSION = `${startYear}-${startYear + 1}`;
+} else if (sessionOverride) {
+  const ov = /^(\d{4})-(\d{4})$/.exec(sessionOverride.trim());
+  if (!ov) { console.error('sessionOverride must look like 2025-2026'); process.exit(1); }
+  startYear = Number(ov[1]);
+  SESSION = sessionOverride.trim();
+} else {
+  console.error('Sheet name must look like 2026-27, or pass sessionOverride (e.g. 2025-2026) as 4th arg');
   process.exit(1);
 }
-const startYear = Number(m[1]);
-const SESSION = `${startYear}-${startYear + 1}`;
+const m = yearMatch; // kept for compatibility — may be null
 const CODE = `${String(startYear).slice(2)}${String(startYear + 1).slice(2)}`; // 2627
 const outDir = path.resolve(ROOT, outArg || path.join('supabase', 'imports', SESSION));
 const REASON = `From attendance sheet (${sheetArg})`;
@@ -101,10 +111,14 @@ const repairName = (name) => name.replace(BROKEN_NAME, (x) => x.replace(/\./g, '
 const repairedNames = [];
 /* -------------------------------------- read -------------------------------------- */
 const wb = XLSX.readFile(path.resolve(fileArg));
-const ws = wb.Sheets[sheetArg];
+// Sheet lookup: try exact name first, then first sheet as fallback
+const ws = wb.Sheets[sheetArg] || wb.Sheets[wb.SheetNames[0]];
 if (!ws) {
-  console.error(`Sheet "${sheetArg}" not found. Sheets: ${wb.SheetNames.join(', ')}`);
+  console.error(`No sheets found in ${fileArg}`);
   process.exit(1);
+}
+if (!wb.Sheets[sheetArg]) {
+  console.log(`Note: sheet "${sheetArg}" not found, using first sheet: "${wb.SheetNames[0]}"`);
 }
 const range = XLSX.utils.decode_range(ws['!ref']);
 const cell = (r, c) => {
@@ -113,8 +127,23 @@ const cell = (r, c) => {
 };
 const text = (v) => (v === undefined || v === null ? '' : String(v).trim());
 
-// Month blocks: a date in row 1 marks the "Eaten" column.
+// Month blocks: a date serial marks the "Eaten" column.
+// New format (Dining Data.xlsx): date is in row 0 above the Eaten column.
+// Old format v1 (25-26, 23-24): row 2 has 'Eaten Days' label then a date SERIAL next to it.
+// Old format v2 (24-25): row 2 has 'Eaten Days' then a TEXT month name ("AUGUST, 2024").
 const blocks = [];
+
+/** Parse a text month name like "AUGUST, 2024" or "AUGUST,  2024" → 'YYYY-MM' or null */
+function parseTextMonth(s) {
+  const monthNames = { JANUARY:1, FEBRUARY:2, MARCH:3, APRIL:4, MAY:5, JUNE:6, JULY:7, AUGUST:8, SEPTEMBER:9, OCTOBER:10, NOVEMBER:11, DECEMBER:12 };
+  const m = /^([A-Z]+)[,\s]+(\d{4})/.exec(String(s || '').trim().toUpperCase());
+  if (!m) return null;
+  const mo = monthNames[m[1]];
+  if (!mo) return null;
+  return `${m[2]}-${pad(mo)}`;
+}
+
+// Try row 0 first (new format: serial date OR text month like "AUGUST,  2024" above Eaten col)
 for (let c = 6; c <= range.e.c; c++) {
   const v = cell(0, c);
   if (typeof v === 'number' && v > 40000) {
@@ -123,7 +152,53 @@ for (let c = 6; c <= range.e.c; c++) {
     const mo = Number(key.slice(5, 7));
     const n = daysInMonth(y, mo);
     blocks.push({ y, mo, n, ym: key.slice(0, 7), day1: c - n, eaten: c, slip: c + 1, date: c + 2, paid: c + 3 });
+  } else if (typeof v === 'string') {
+    const ym = parseTextMonth(v);
+    if (ym) {
+      const y = Number(ym.slice(0, 4));
+      const mo = Number(ym.slice(5, 7));
+      const n = daysInMonth(y, mo);
+      blocks.push({ y, mo, n, ym, day1: c - n, eaten: c, slip: c + 1, date: c + 2, paid: c + 3 });
+    }
   }
+}
+// If nothing found in row 0, try row 2 (old format v1: date SERIAL next to "Eaten Days")
+if (!blocks.length) {
+  for (let c = 6; c <= range.e.c; c++) {
+    const label = text(cell(2, c - 1));
+    const v = cell(2, c);
+    if ((label === 'Eaten Days' || label === 'Eaten') && typeof v === 'number' && v > 40000) {
+      const key = serialToKey(v);
+      const y = Number(key.slice(0, 4));
+      const mo = Number(key.slice(5, 7));
+      const n = daysInMonth(y, mo);
+      const eatenCol = c - 1;
+      const paidCol = text(cell(2, c + 3)).toUpperCase().includes('FULL PAYMENT') ? c + 3 : c + 2;
+      blocks.push({ y, mo, n, ym: key.slice(0, 7), day1: eatenCol - n, eaten: eatenCol, slip: c, date: c + 1, paid: paidCol });
+    }
+  }
+  if (blocks.length) console.log('Detected OLD DATA format v1 (dates in row 2 as serials).');
+}
+// If still nothing, try row 2 with TEXT month names (old format v2: "AUGUST, 2024")
+// In this format: 'Eaten Days' at eatenCol, text month at eatenCol+1
+// Student row: eatenCol=eaten count, eatenCol+1=amount, eatenCol+2=slip no, eatenCol+3=slip date(serial), eatenCol+4=days
+if (!blocks.length) {
+  for (let c = 6; c <= range.e.c; c++) {
+    const label = text(cell(2, c));
+    const v    = text(cell(2, c + 1));
+    if (label === 'Eaten Days') {
+      const ym = parseTextMonth(v);
+      if (ym) {
+        const y = Number(ym.slice(0, 4));
+        const mo = Number(ym.slice(5, 7));
+        const n = daysInMonth(y, mo);
+        // days start at c-n (31 day cols before the Eaten col), Eaten at c
+        // slip layout: amount=c+1, slipno=c+2, slipdate=c+3, days=c+4
+        blocks.push({ y, mo, n, ym, day1: c - n, eaten: c, slip: c + 2, date: c + 3, paid: c + 1, _v2: true });
+      }
+    }
+  }
+  if (blocks.length) console.log('Detected OLD DATA format v2 (month names as text in row 2).');
 }
 if (!blocks.length) {
   console.error('No month blocks found (row 1 needs a date above each "Eaten" column).');
@@ -131,13 +206,33 @@ if (!blocks.length) {
 }
 console.log(`Sheet ${sheetArg}: ${blocks.map((b) => b.ym).join(', ')}`);
 
+// Detect which column layout we have:
+//   New format: EN.ID=0, HOUSE=1, R.No=2, NAME=3, COURSE=4, days start at 6
+//   Old format: EN.ID=0, HOUSE=1, R.No=2, Column2=3, NAME=4, COURSE=5, days start at 9
+// Heuristic: if the header row has "Column2" at col 3, it's old format.
+const oldFormat = (() => {
+  for (let r = 0; r <= Math.min(range.e.r, 10); r++) {
+    const v = text(cell(r, 3));
+    if (v === 'Column2') return true;
+    if (v === 'NAME OF STUDENTS') return false;
+  }
+  return false;
+})();
+// Column indices
+const COL_NAME   = oldFormat ? 4 : 3;
+const COL_COURSE = oldFormat ? 5 : 4;
+const COL_REMARK = oldFormat ? 6 : 5;
+// Row where students start (old format has 3 header rows before: 0,1,2,3,4 header, 5+ data)
+const ROW_START  = oldFormat ? 5 : 2;
+if (oldFormat) console.log('Detected OLD DATA format: name=col4, course=col5, days start at col9, students from row 5.');
+
 const students = [];
 const seen = new Set();
 const closedDays = new Map(); // date -> reason
 const outliers = [];
-for (let r = 2; r <= range.e.r; r++) {
+for (let r = ROW_START; r <= range.e.r; r++) {
   const enr = text(cell(r, 0)).toUpperCase();
-  if (!enr || !text(cell(r, 3))) continue; // totals row or blank row
+  if (!enr || !text(cell(r, COL_NAME))) continue; // totals row or blank row
   if (seen.has(enr)) {
     warn(`Row ${r + 1}: ${enr} appears twice, the later row is skipped`);
     continue;
@@ -150,8 +245,8 @@ for (let r = 2; r <= range.e.r; r++) {
     enr,
     house: HOUSES[houseRaw] || houseRaw,
     room: text(cell(r, 2)),
-    name: repairName(text(cell(r, 3)).replace(/\s+/g, ' ')),
-    course: text(cell(r, 4)).replace(/\.+$/, ''),
+    name: repairName(text(cell(r, COL_NAME)).replace(/\s+/g, ' ')),
+    course: text(cell(r, COL_COURSE)).replace(/\.+$/, ''),
     remarks: [],
     ate: new Set(),
     marked: new Set(), // days with CLOSE / ssday in this student's own row
@@ -159,8 +254,8 @@ for (let r = 2; r <= range.e.r; r++) {
     sheetEatenTotals: new Map(),
     slips: []
   };
-  if (st.name !== text(cell(r, 3)).replace(/\s+/g, ' ')) repairedNames.push(`Row ${r + 1}: ${text(cell(r, 3))} -> ${st.name}`);
-  const remark = text(cell(r, 5));
+  if (st.name !== text(cell(r, COL_NAME)).replace(/\s+/g, ' ')) repairedNames.push(`Row ${r + 1}: ${text(cell(r, COL_NAME))} -> ${st.name}`);
+  const remark = text(cell(r, COL_REMARK));
   if (remark) st.remarks.push(remark);
 
   for (const b of blocks) {
@@ -453,7 +548,7 @@ chunked('04_slips', allSlips, (slice) =>
   slice
     .map(({ s, p }) => `  (${sq(p.id)}, ${sq(s.enr)}, ${sq(p.slip_no)}, ${p.amount}, ${sq(p.paid_on)}, ${sq(p.mode)}, ${sq(p.note)})`)
     .join(',\n') +
-  `\n) as v(id, enr, slip_no, amount, paid_on, mode, note)\njoin public.students s on s.enrollment_no = v.enr\non conflict (id) do nothing;\n`
+  `\n) as v(id, enr, slip_no, amount, paid_on, mode, note)\njoin public.students s on s.enrollment_no = v.enr\non conflict do nothing;\n`
 );
 
 // 5. extensions

@@ -266,6 +266,10 @@ export function simulateAccount(input: EngineInput): AccountState {
     });
   };
 
+  const startSession = sessionOfDate(start);
+  // Ignore slips from earlier sessions so old-year deposits stay in history and don't inflate this session's balance.
+  while (si < slips.length && sessionOfDate(slips[si].paid_on) < startSession) si++;
+
   for (let d = start; d <= todayKey; d = addDaysKey(d, 1)) {
     while (si < slips.length && slips[si].paid_on <= d) applySlip(slips[si++]);
     while (ri < events.length && events[ri].start_date <= d) {

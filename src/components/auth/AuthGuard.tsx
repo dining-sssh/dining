@@ -3,7 +3,8 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { AuthSession, UserRole } from '@/types';
-import { homeRouteFor, panelOf, readAuthSession, signOutEverywhere } from '@/lib/auth';
+import { clearAuthSession, homeRouteFor, panelOf, readAuthSession, signOutEverywhere } from '@/lib/auth';
+import { isSupabaseConfigured, supabase } from '@/lib/supabaseClient';
 
 interface AuthGuardProps {
   /** Panels allowed to see this route. Anyone else is sent to their own panel. */
@@ -21,16 +22,32 @@ export const AuthGuard: React.FC<AuthGuardProps> = ({ allow, children }) => {
   const [loggingOut, setLoggingOut] = useState(false);
 
   useEffect(() => {
-    const current = readAuthSession();
-    if (!current) {
-      router.replace('/');
-      return;
-    }
-    if (!allow.includes(panelOf(current))) {
-      router.replace(homeRouteFor(current));
-      return;
-    }
-    setSession(current);
+    let cancelled = false;
+    const check = async () => {
+      const current = readAuthSession();
+      if (!current) {
+        router.replace('/');
+        return;
+      }
+      if (isSupabaseConfigured && supabase) {
+        const { data } = await supabase.auth.getSession();
+        if (cancelled) return;
+        if (!data.session) {
+          clearAuthSession();
+          router.replace('/');
+          return;
+        }
+      }
+      if (!allow.includes(panelOf(current))) {
+        router.replace(homeRouteFor(current));
+        return;
+      }
+      setSession(current);
+    };
+    check();
+    return () => {
+      cancelled = true;
+    };
     // `allow` is a literal array on every render; the role check only needs to run once per mount.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [router]);

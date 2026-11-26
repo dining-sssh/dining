@@ -129,4 +129,4 @@ from (values
   ('slip-2627-GR7342-202611', 'GR7342', '155/15408', 1400, '2026-11-07', 'slip', null)
 ) as v(id, enr, slip_no, amount, paid_on, mode, note)
 join public.students s on s.enrollment_no = v.enr
-on conflict (id) do nothing;
+on conflict do nothing;

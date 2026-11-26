@@ -32,13 +32,27 @@ const fail = (error: { message: string; code?: string } | null): void => {
 
 /** Reads every page of a query. `build` must include a stable order. */
 async function fetchAll<T>(table: string, build: (q: any) => any): Promise<T[]> {
-  const out: T[] = [];
-  for (let from = 0; ; from += PAGE) {
-    const { data, error } = await build(client().from(table).select('*')).range(from, from + PAGE - 1);
-    fail(error);
-    const rows = (data ?? []) as T[];
-    out.push(...rows);
-    if (rows.length < PAGE) break;
+  const { data: firstData, error: firstError, count } = await build(
+    client().from(table).select('*', { count: 'exact' })
+  ).range(0, PAGE - 1);
+  fail(firstError);
+  const firstRows = (firstData ?? []) as T[];
+  if (firstRows.length < PAGE || !count || count <= PAGE) return firstRows;
+
+  const out: T[] = [...firstRows];
+  const starts: number[] = [];
+  for (let from = PAGE; from < count; from += PAGE) starts.push(from);
+
+  // Fetch remaining pages in parallel batches of 6 to avoid sequential round-trip bottlenecks.
+  for (let i = 0; i < starts.length; i += 6) {
+    const batch = starts.slice(i, i + 6);
+    const results = await Promise.all(
+      batch.map((from) => build(client().from(table).select('*')).range(from, from + PAGE - 1))
+    );
+    for (const res of results) {
+      fail(res.error);
+      out.push(...((res.data ?? []) as T[]));
+    }
   }
   return out;
 }
@@ -79,11 +93,17 @@ export async function removeStudent(id: string): Promise<void> {
 
 /* ---------------------- dining on / off requests ---------------------- */
 
-export async function listRequests(): Promise<DiningRequest[]> {
-  const rows = await fetchAll<DiningRequest>('rebate_requests', (q) =>
-    q.order('created_at', { ascending: false }).order('id')
-  );
-  return rows.map(clean);
+export async function listRequests(opts: { fromDate?: string; studentId?: string } = {}): Promise<DiningRequest[]> {
+  // Order by primary key `id` so Postgres uses the index instead of sorting 50k+ rows by unindexed created_at.
+  const rows = await fetchAll<DiningRequest>('rebate_requests', (q) => {
+    let query = q;
+    if (opts.studentId) query = query.eq('student_id', opts.studentId);
+    if (opts.fromDate) query = query.or(`start_date.gte.${opts.fromDate},status.eq.pending`);
+    return query.order('id');
+  });
+  return rows
+    .map(clean)
+    .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)) || a.id.localeCompare(b.id));
 }
 
 export async function insertRequest(
@@ -112,13 +132,17 @@ const toSlip = (row: any): PaymentSlip => ({
   settled_months: row.settled_months ?? undefined
 });
 
-export async function listSlips(opts: { enrollmentNo?: string } = {}): Promise<PaymentSlip[]> {
+export async function listSlips(opts: { enrollmentNo?: string; studentId?: string; fromDate?: string } = {}): Promise<PaymentSlip[]> {
   const rows = await fetchAll<any>('payment_slips', (q) => {
     let query = q;
     if (opts.enrollmentNo) query = query.eq('enrollment_no', opts.enrollmentNo.trim().toUpperCase());
-    return query.order('paid_on').order('slip_no');
+    if (opts.studentId) query = query.eq('student_id', opts.studentId);
+    if (opts.fromDate) query = query.gte('paid_on', opts.fromDate);
+    return query.order('id');
   });
-  return rows.map(toSlip);
+  return rows
+    .map(toSlip)
+    .sort((a, b) => a.paid_on.localeCompare(b.paid_on) || a.slip_no.localeCompare(b.slip_no));
 }
 
 export async function insertSlip(slip: Omit<PaymentSlip, 'id'>): Promise<PaymentSlip> {
@@ -188,11 +212,16 @@ export async function insertEntry(row: Omit<DeficitEntry, 'id' | 'created_at'>):
 
 /* ---------------------------- grace extensions ---------------------------- */
 
-export async function listExtensions(): Promise<GraceExtension[]> {
-  const rows = await fetchAll<GraceExtension>('grace_extensions', (q) =>
-    q.order('created_at', { ascending: false }).order('id')
-  );
-  return rows.map(clean);
+export async function listExtensions(opts: { studentId?: string; fromDate?: string } = {}): Promise<GraceExtension[]> {
+  const rows = await fetchAll<GraceExtension>('grace_extensions', (q) => {
+    let query = q;
+    if (opts.studentId) query = query.eq('student_id', opts.studentId);
+    if (opts.fromDate) query = query.or(`applied_at.gte.${opts.fromDate},status.eq.awaiting_munshi`);
+    return query.order('id');
+  });
+  return rows
+    .map(clean)
+    .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)) || a.id.localeCompare(b.id));
 }
 
 export async function insertExtension(

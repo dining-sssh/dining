@@ -80,6 +80,7 @@ alter table public.rebate_requests drop constraint if exists rebate_requests_che
 alter table public.rebate_requests drop constraint if exists rebate_requests_kind_check;
 alter table public.rebate_requests add constraint rebate_requests_kind_check check (kind in ('off', 'on'));
 create index if not exists idx_requests_student on public.rebate_requests (student_id);
+create index if not exists idx_requests_start_date on public.rebate_requests (start_date);
 
 -- 4. FOOD CHARGES SLIPS (every deposit the Munshi receives)
 create table if not exists public.payment_slips (
@@ -107,6 +108,8 @@ alter table public.payment_slips alter column book_no set default '1';
 alter table public.payment_slips drop constraint if exists payment_slips_slip_no_key;
 create unique index if not exists payment_slips_slip_student_key on public.payment_slips (slip_no, enrollment_no);
 create index if not exists idx_slips_enrollment on public.payment_slips (enrollment_no);
+create index if not exists idx_slips_paid_on on public.payment_slips (paid_on);
+create index if not exists idx_slips_student on public.payment_slips (student_id);
 
 -- 5. CARRIED DEFICITS (money still owed from the old register, month by month)
 create table if not exists public.deficit_entries (
@@ -119,6 +122,8 @@ create table if not exists public.deficit_entries (
   created_at    timestamptz not null default now()
 );
 create index if not exists idx_entries_student on public.deficit_entries (student_id);
+create index if not exists idx_extensions_student on public.grace_extensions (student_id);
+create index if not exists idx_extensions_applied_at on public.grace_extensions (applied_at);
 
 -- 6. GRACE EXTENSIONS: the Provost allows more than -3 days, the Munshi applies it
 create table if not exists public.grace_extensions (

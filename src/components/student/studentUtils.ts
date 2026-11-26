@@ -16,7 +16,8 @@ export const HALL_NAME = 'Sulaiman Hall';
 export const SESSIONS = [
   { value: '2026-2027', label: 'Session 2026-2027 (Current)' },
   { value: '2025-2026', label: 'Session 2025-2026 (Previous)' },
-  { value: '2024-2025', label: 'Session 2024-2025 (Past)' }
+  { value: '2024-2025', label: 'Session 2024-2025 (Past)' },
+  { value: '2023-2024', label: 'Session 2023-2024 (Past)' }
 ];
 
 /** The dining year runs August to May. */
