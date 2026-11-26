@@ -1,10 +1,10 @@
 'use client';
 
-import React, { useMemo, useState } from 'react';
-import { Award, MessageSquare, Plus, Star } from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Award, Calendar, CheckCircle2, Clock, MessageSquare, Plus, Star } from 'lucide-react';
 import { FoodReview, HOSTEL_HOUSES, Student } from '@/types';
 import { aggregateReviews, HOUSE_CODES, scoreBadge } from '@/lib/reviewStats';
-import { addDays, formatLongDate } from './studentUtils';
+import { formatLongDate, getReviewWindowStatus } from './studentUtils';
 
 interface StudentReviewsViewProps {
   student: Student;
@@ -12,14 +12,6 @@ interface StudentReviewsViewProps {
   todayKey: string;
   onRate: () => void;
 }
-
-type Period = 'today' | 'week' | 'all';
-
-const PERIODS: Array<{ id: Period; label: string }> = [
-  { id: 'today', label: 'Today' },
-  { id: 'week', label: '7 days' },
-  { id: 'all', label: 'All time' }
-];
 
 const MEAL_LABEL: Record<FoodReview['meal_type'], string> = {
   lunch: 'Lunch',
@@ -30,7 +22,12 @@ const MEAL_LABEL: Record<FoodReview['meal_type'], string> = {
 const MY_RECENT_LIMIT = 5;
 
 export const StudentReviewsView: React.FC<StudentReviewsViewProps> = ({ student, reviews, todayKey, onRate }) => {
-  const [period, setPeriod] = useState<Period>('week');
+  const [windowStatus, setWindowStatus] = useState(() => getReviewWindowStatus());
+
+  useEffect(() => {
+    const timer = setInterval(() => setWindowStatus(getReviewWindowStatus()), 15000);
+    return () => clearInterval(timer);
+  }, []);
 
   const mine = useMemo(
     () =>
@@ -42,12 +39,8 @@ export const StudentReviewsView: React.FC<StudentReviewsViewProps> = ({ student,
   const myAggregate = useMemo(() => aggregateReviews(mine), [mine]);
   const ratedToday = mine.some((r) => r.date === todayKey);
 
-  const periodReviews = useMemo(() => {
-    if (period === 'all') return reviews;
-    const from = period === 'today' ? todayKey : addDays(todayKey, -6);
-    return reviews.filter((r) => r.date >= from && r.date <= todayKey);
-  }, [reviews, period, todayKey]);
-  const overall = useMemo(() => aggregateReviews(periodReviews), [periodReviews]);
+  const todayReviews = useMemo(() => reviews.filter((r) => r.date === todayKey), [reviews, todayKey]);
+  const overall = useMemo(() => aggregateReviews(todayReviews), [todayReviews]);
   const badge = scoreBadge(overall.overall);
 
   const params = [
@@ -62,16 +55,65 @@ export const StudentReviewsView: React.FC<StudentReviewsViewProps> = ({ student,
       <div className="flex items-start justify-between gap-3">
         <div>
           <h2 className="text-lg font-bold text-slate-900">Food & Cleanliness</h2>
-          <p className="text-xs text-slate-500">Your ratings and what all residents think</p>
+          <p className="text-xs text-slate-500">Your ratings and today&apos;s hall feedback</p>
         </div>
-        <button
-          type="button"
-          onClick={onRate}
-          className="press flex shrink-0 items-center gap-1.5 rounded-full bg-emerald-900 px-4 py-2.5 text-xs font-bold text-white shadow"
-        >
-          <Plus className="h-4 w-4" />
-          Rate now
-        </button>
+        {ratedToday ? (
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 px-3.5 py-2 text-xs font-bold text-emerald-800">
+            <CheckCircle2 className="h-4 w-4 text-emerald-700" />
+            Rated today
+          </span>
+        ) : windowStatus.isOpen ? (
+          <button
+            type="button"
+            onClick={onRate}
+            className="press flex shrink-0 items-center gap-1.5 rounded-full bg-emerald-900 px-4 py-2.5 text-xs font-bold text-white shadow ring-2 ring-emerald-700/40"
+          >
+            <Plus className="h-4 w-4" />
+            Rate today
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={onRate}
+            className="press flex shrink-0 items-center gap-1.5 rounded-full border border-slate-200 bg-slate-100 px-3.5 py-2 text-xs font-bold text-slate-600 hover:bg-slate-200"
+          >
+            <Clock className="h-3.5 w-3.5" />
+            {windowStatus.windowLabel}
+          </button>
+        )}
+      </div>
+
+      {/* Review window status banner */}
+      <div
+        className={`rounded-2xl border p-3.5 text-xs ${
+          ratedToday
+            ? 'border-emerald-200 bg-emerald-50 text-emerald-950'
+            : windowStatus.isOpen
+            ? 'border-emerald-300 bg-emerald-50/90 text-emerald-950 ring-1 ring-emerald-400/40'
+            : 'border-amber-200 bg-amber-50 text-amber-950'
+        }`}
+      >
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            {ratedToday ? (
+              <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-700" />
+            ) : (
+              <Clock
+                className={`h-4 w-4 shrink-0 ${
+                  windowStatus.isOpen ? 'animate-pulse text-emerald-700' : 'text-amber-700'
+                }`}
+              />
+            )}
+            <span className="font-semibold">
+              {ratedToday
+                ? `You have rated today's dinner (${formatLongDate(todayKey)}). Thank you!`
+                : windowStatus.message}
+            </span>
+          </div>
+          <span className="shrink-0 rounded-full bg-white/80 px-2.5 py-0.5 text-[11px] font-bold shadow-2xs">
+            {ratedToday ? 'Submitted' : windowStatus.countdown}
+          </span>
+        </div>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2 lg:items-start">
@@ -103,30 +145,24 @@ export const StudentReviewsView: React.FC<StudentReviewsViewProps> = ({ student,
           )}
         </section>
 
-        {/* Overall of all students */}
+        {/* Today's overall rating of all students */}
         <section className="rounded-3xl border border-white bg-white p-4 shadow-lg shadow-emerald-950/5">
           <div className="flex items-center justify-between gap-2">
-            <h3 className="text-sm font-bold text-slate-900">Overall rating · all students</h3>
+            <h3 className="text-sm font-bold text-slate-900">Today&apos;s rating · all students</h3>
           </div>
 
-          <div className="mt-3 grid grid-cols-3 rounded-full bg-slate-100 p-1 text-xs font-bold">
-            {PERIODS.map((p) => (
-              <button
-                key={p.id}
-                type="button"
-                onClick={() => setPeriod(p.id)}
-                aria-pressed={period === p.id}
-                className={`press rounded-full py-1.5 transition-colors ${
-                  period === p.id ? 'bg-white text-emerald-950 shadow' : 'text-slate-500'
-                }`}
-              >
-                {p.label}
-              </button>
-            ))}
+          <div className="mt-3 flex items-center justify-between rounded-2xl border border-emerald-900/10 bg-emerald-50/70 px-3.5 py-2.5 text-xs text-emerald-950">
+            <span className="flex items-center gap-2 font-bold">
+              <Calendar className="h-4 w-4 text-emerald-800" />
+              {formatLongDate(todayKey)}
+            </span>
+            <span className="rounded-full bg-emerald-200/80 px-2.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wide text-emerald-900">
+              Today&apos;s Score
+            </span>
           </div>
 
           {overall.count === 0 ? (
-            <p className="py-8 text-center text-xs text-slate-400">No reviews in this period.</p>
+            <p className="py-8 text-center text-xs text-slate-400">No reviews submitted yet for today.</p>
           ) : (
             <>
               <div className="mt-4 flex items-center gap-4 rounded-2xl bg-gradient-to-br from-[#0c5a41] to-[#052e20] p-4 text-white">
